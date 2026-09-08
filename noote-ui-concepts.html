@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Noote — UI Concepts</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#FAFAF7; --surface:#FFFFFF; --surface-alt:#F2F1EE; --surface-raised:#FBFBF9;
+    --border:#E4E3DF; --border-soft:#EDEDE9;
+    --text:#1A1A18; --text-muted:#6B6B66; --text-faint:#A3A39D;
+    --focus:#8A8D91; --selection-bg:#ECEBE7; --active-bg:#F0EFEB;
+    --shadow: 0 1px 2px rgba(20,20,18,0.04), 0 8px 24px rgba(20,20,18,0.06);
+    --shadow-lg: 0 20px 60px rgba(20,20,18,0.18);
+    --avatar-1:#9CAF9A; --avatar-2:#9AAAB8; --avatar-3:#C2A490;
+    --code-bg:#F4F3F0; --code-border:#E6E5E1;
+    --radius:10px; --radius-sm:6px;
+  }
+  [data-theme="dark"]{
+    --bg:#121212; --surface:#1C1C1C; --surface-alt:#202020; --surface-raised:#232323;
+    --border:#2C2C2A; --border-soft:#252523;
+    --text:#EDEDEA; --text-muted:#9A9A94; --text-faint:#68685f;
+    --focus:#7C8085; --selection-bg:#262624; --active-bg:#242422;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.4);
+    --shadow-lg: 0 20px 60px rgba(0,0,0,0.55);
+    --avatar-1:#7C9A78; --avatar-2:#7C93A6; --avatar-3:#AC8B72;
+    --code-bg:#181818; --code-border:#2A2A28;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',-apple-system,sans-serif;
+    min-height:100vh;
+    transition:background .25s ease, color .25s ease;
+  }
+
+  /* ---------- Top chrome ---------- */
+  .page-header{
+    position:sticky; top:0; z-index:50;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 28px;
+    background:var(--bg);
+    border-bottom:1px solid var(--border);
+  }
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand-mark{
+    width:26px; height:26px; border-radius:7px;
+    background:var(--text); color:var(--bg);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'JetBrains Mono',monospace; font-weight:600; font-size:13px;
+  }
+  .brand-name{ font-weight:600; font-size:14.5px; letter-spacing:-0.01em; }
+  .brand-sub{ color:var(--text-faint); font-size:12.5px; margin-left:6px; }
+
+  .controls{ display:flex; align-items:center; gap:18px; }
+
+  .platform-tabs{
+    display:flex; gap:2px;
+    background:var(--surface-alt);
+    border:1px solid var(--border);
+    border-radius:9px;
+    padding:2px;
+  }
+  .platform-tabs button{
+    appearance:none; border:none; background:transparent;
+    font-family:inherit; font-size:12.5px; font-weight:500;
+    color:var(--text-muted);
+    padding:6px 13px; border-radius:7px; cursor:pointer;
+    display:flex; align-items:center; gap:6px;
+    transition:all .15s ease;
+  }
+  .platform-tabs button.active{
+    background:var(--surface); color:var(--text);
+    box-shadow:var(--shadow);
+  }
+  .platform-tabs button:hover:not(.active){ color:var(--text); }
+  .platform-tabs svg{ width:14px; height:14px; }
+
+  .theme-toggle{
+    width:34px; height:34px; border-radius:9px;
+    border:1px solid var(--border); background:var(--surface-alt);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; color:var(--text-muted);
+  }
+  .theme-toggle:hover{ color:var(--text); }
+  .theme-toggle svg{ width:16px; height:16px; }
+  .theme-toggle .moon{ display:none; }
+  [data-theme="dark"] .theme-toggle .sun{ display:none; }
+  [data-theme="dark"] .theme-toggle .moon{ display:block; }
+
+  /* ---------- Stage ---------- */
+  .stage{
+    padding:56px 24px 100px;
+    display:flex; justify-content:center;
+  }
+  .platform-view{ display:none; }
+  .platform-view.active{ display:block; }
+  .caption{
+    text-align:center; color:var(--text-faint); font-size:12px;
+    margin-top:22px; letter-spacing:.02em;
+  }
+
+  /* ================= Shared app UI (used inside every frame) ================= */
+  .app-shell{
+    display:flex; height:100%; background:var(--surface); color:var(--text);
+    font-size:13px; overflow:hidden;
+  }
+
+  /* Sidebar */
+  .sidebar{
+    width:210px; flex-shrink:0;
+    background:var(--surface-alt);
+    border-right:1px solid var(--border);
+    display:flex; flex-direction:column;
+    padding:14px 10px;
+  }
+  .sidebar-search{
+    display:flex; align-items:center; gap:7px;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:7px; padding:6px 9px; margin-bottom:14px;
+    color:var(--text-faint); font-size:12px;
+  }
+  .sidebar-search svg{ width:13px; height:13px; flex-shrink:0; }
+  .nav-section-label{
+    font-size:10.5px; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--text-faint); padding:8px 8px 5px;
+  }
+  .nav-item{
+    display:flex; align-items:center; gap:8px;
+    padding:6px 8px; border-radius:6px; cursor:pointer;
+    color:var(--text-muted); font-size:12.5px;
+  }
+  .nav-item svg{ width:14px; height:14px; flex-shrink:0; opacity:.75; }
+  .nav-item.active{ background:var(--active-bg); color:var(--text); font-weight:500; }
+  .nav-item.nested{ padding-left:24px; }
+  .nav-item .count{ margin-left:auto; color:var(--text-faint); font-size:11px; }
+  .nav-item:hover:not(.active){ background:var(--selection-bg); }
+
+  .sidebar-footer{
+    margin-top:auto; padding:10px 8px;
+    display:flex; align-items:center; gap:8px;
+    border-top:1px solid var(--border-soft);
+  }
+  .storage-dot{ width:6px; height:6px; border-radius:50%; background:var(--avatar-1); flex-shrink:0; }
+  .sidebar-footer span{ font-size:11px; color:var(--text-faint); }
+
+  /* Notes list */
+  .notes-list{
+    width:250px; flex-shrink:0;
+    border-right:1px solid var(--border);
+    display:flex; flex-direction:column;
+    overflow-y:auto;
+  }
+  .list-header{
+    padding:14px 16px 10px;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .list-header h2{ font-size:14px; margin:0; font-weight:600; }
+  .new-note-btn{
+    width:22px; height:22px; border-radius:6px;
+    background:var(--text); color:var(--bg);
+    border:none; display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  .new-note-btn svg{ width:12px; height:12px; }
+  .note-item{
+    padding:11px 16px; border-bottom:1px solid var(--border-soft);
+    cursor:pointer;
+  }
+  .note-item.active{ background:var(--active-bg); }
+  .note-item:hover:not(.active){ background:var(--selection-bg); }
+  .note-item-top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
+  .note-title{ font-size:12.5px; font-weight:600; }
+  .note-time{ font-size:10.5px; color:var(--text-faint); flex-shrink:0; }
+  .note-preview{
+    font-size:11.5px; color:var(--text-muted);
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+    line-height:1.4;
+  }
+  .note-meta-row{ display:flex; align-items:center; gap:6px; margin-top:6px; }
+  .tag-chip{
+    font-size:10px; padding:1.5px 6px; border-radius:20px;
+    background:var(--surface-alt); border:1px solid var(--border); color:var(--text-muted);
+  }
+
+  /* Editor */
+  .editor-pane{ flex:1; display:flex; flex-direction:column; min-width:0; }
+  .editor-topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 22px; border-bottom:1px solid var(--border);
+    flex-shrink:0;
+  }
+  .breadcrumb{ font-size:11.5px; color:var(--text-faint); display:flex; align-items:center; gap:5px; }
+  .breadcrumb b{ color:var(--text-muted); font-weight:500; }
+  .editor-actions{ display:flex; align-items:center; gap:12px; }
+  .sync-status{ display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text-faint); }
+  .sync-dot{ width:6px; height:6px; border-radius:50%; background:var(--avatar-1); }
+  .avatar-stack{ display:flex; }
+  .avatar{
+    width:22px; height:22px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:9.5px; font-weight:600; color:#fff;
+    border:2px solid var(--surface); margin-left:-6px;
+  }
+  .avatar:first-child{ margin-left:0; }
+  .share-btn{
+    font-size:11.5px; font-weight:500; padding:6px 12px;
+    background:var(--surface-alt); border:1px solid var(--border); border-radius:7px;
+    color:var(--text); cursor:pointer; display:flex; align-items:center; gap:5px;
+  }
+  .share-btn svg{ width:12px; height:12px; }
+
+  .editor-scroll{ flex:1; overflow-y:auto; padding:30px 40px 80px; }
+  .editor-title{
+    font-size:24px; font-weight:700; letter-spacing:-0.015em;
+    margin:0 0 20px; border:none; background:transparent; width:100%;
+    font-family:inherit; color:var(--text);
+  }
+
+  .block-row{ display:flex; margin-bottom:2px; }
+  .block-rail{
+    width:26px; flex-shrink:0; display:flex; justify-content:center; padding-top:3px;
+    color:var(--text-faint);
+  }
+  .block-rail svg{ width:13px; height:13px; }
+  .block-content{ flex:1; min-width:0; padding-bottom:10px; }
+
+  .b-h{ font-size:15.5px; font-weight:600; margin:6px 0; }
+  .b-p{ font-size:13.5px; line-height:1.65; color:var(--text); margin:0; }
+  .b-ul{ margin:2px 0; padding-left:18px; font-size:13.5px; line-height:1.75; color:var(--text); }
+  .b-ul li::marker{ color:var(--text-faint); }
+
+  .b-code{
+    background:var(--code-bg); border:1px solid var(--code-border); border-radius:8px;
+    padding:12px 14px; overflow-x:auto;
+  }
+  .b-code-lang{
+    font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text-faint);
+    margin-bottom:8px; text-transform:uppercase; letter-spacing:.05em;
+  }
+  .b-code pre{ margin:0; font-family:'JetBrains Mono',monospace; font-size:12px; line-height:1.6; color:var(--text); }
+  .b-code .kw{ color:var(--text-muted); font-weight:600; }
+
+  .b-table{ border-collapse:collapse; width:100%; font-size:12.5px; }
+  .b-table th, .b-table td{
+    border:1px solid var(--border); padding:7px 10px; text-align:left;
+  }
+  .b-table th{ background:var(--surface-alt); font-weight:600; color:var(--text-muted); font-size:11.5px; }
+
+  .b-image{
+    border:1px dashed var(--border); border-radius:8px;
+    background:var(--surface-alt);
+    display:flex; align-items:center; gap:10px;
+    padding:14px; color:var(--text-faint); font-size:12px;
+  }
+  .b-image svg{ width:18px; height:18px; flex-shrink:0; }
+
+  /* ================= Frame chrome per platform ================= */
+
+  /* --- macOS window --- */
+  .mac-window{
+    width:1000px; max-width:90vw; height:620px;
+    border-radius:12px; overflow:hidden;
+    box-shadow:var(--shadow-lg);
+    border:1px solid var(--border);
+    display:flex; flex-direction:column;
+    font-family:-apple-system,'SF Pro Text',Inter,sans-serif;
+  }
+  .mac-titlebar{
+    height:38px; flex-shrink:0; background:var(--surface-alt);
+    border-bottom:1px solid var(--border);
+    display:flex; align-items:center; padding:0 14px; position:relative;
+  }
+  .traffic{ display:flex; gap:8px; }
+  .traffic span{ width:11px; height:11px; border-radius:50%; }
+  .traffic .red{ background:#EC6A5E; } .traffic .yellow{ background:#F4BE4F; } .traffic .green{ background:#61C454; }
+  [data-theme="dark"] .traffic span{ filter:brightness(.85); }
+  .mac-titlebar .wtitle{
+    position:absolute; left:0; right:0; text-align:center;
+    font-size:12.5px; font-weight:500; color:var(--text-muted);
+  }
+  .mac-window .app-shell{ flex:1; min-height:0; }
+
+  /* --- Windows window --- */
+  .win-window{
+    width:1000px; max-width:90vw; height:620px;
+    border-radius:8px; overflow:hidden;
+    box-shadow:var(--shadow-lg);
+    border:1px solid var(--border);
+    display:flex; flex-direction:column;
+    font-family:'Segoe UI',Inter,sans-serif;
+  }
+  .win-titlebar{
+    height:34px; flex-shrink:0; background:var(--surface-alt);
+    border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between; padding:0 0 0 12px;
+  }
+  .win-titlebar .wtitle-group{ display:flex; align-items:center; gap:8px; }
+  .win-titlebar .wtitle-group svg{ width:14px; height:14px; opacity:.8; }
+  .win-titlebar .wtitle{ font-size:12px; color:var(--text-muted); }
+  .win-controls{ display:flex; height:100%; }
+  .win-controls div{
+    width:44px; display:flex; align-items:center; justify-content:center;
+    color:var(--text-muted); cursor:pointer;
+  }
+  .win-controls div:hover{ background:var(--selection-bg); }
+  .win-controls div.close:hover{ background:#E81123; color:#fff; }
+  .win-controls svg{ width:10px; height:10px; }
+  .win-menubar{
+    height:30px; flex-shrink:0; background:var(--surface);
+    border-bottom:1px solid var(--border);
+    display:flex; align-items:center; gap:18px; padding:0 14px;
+    font-size:12px; color:var(--text-muted);
+  }
+  .win-window .app-shell{ flex:1; min-height:0; }
+
+  /* --- Web browser --- */
+  .web-window{
+    width:1080px; max-width:92vw; height:640px;
+    border-radius:11px; overflow:hidden;
+    box-shadow:var(--shadow-lg);
+    border:1px solid var(--border);
+    display:flex; flex-direction:column;
+  }
+  .web-chrome{
+    background:var(--surface-alt); flex-shrink:0;
+    border-bottom:1px solid var(--border);
+  }
+  .web-tabbar{ display:flex; align-items:center; padding:9px 10px 0; gap:6px; }
+  .web-tab{
+    display:flex; align-items:center; gap:6px;
+    background:var(--surface); border:1px solid var(--border); border-bottom:none;
+    border-radius:8px 8px 0 0; padding:7px 14px; font-size:11.5px; color:var(--text-muted);
+  }
+  .web-tab .favicon{ width:12px; height:12px; border-radius:3px; background:var(--text); flex-shrink:0; }
+  .web-addr-row{ display:flex; align-items:center; gap:10px; padding:8px 12px; background:var(--surface); }
+  .web-nav-icons{ display:flex; gap:8px; color:var(--text-faint); flex-shrink:0; }
+  .web-nav-icons svg{ width:14px; height:14px; }
+  .web-address{
+    flex:1; background:var(--surface-alt); border:1px solid var(--border);
+    border-radius:20px; padding:5px 14px; font-size:11.5px; color:var(--text-muted);
+    display:flex; align-items:center; gap:6px;
+  }
+  .web-address svg{ width:11px; height:11px; flex-shrink:0; }
+  .web-window .app-shell{ flex:1; min-height:0; }
+
+  /* --- Mobile --- */
+  .mobile-row{ display:flex; gap:40px; align-items:flex-start; justify-content:center; flex-wrap:wrap; }
+  .phone{
+    width:320px; height:660px;
+    border-radius:38px;
+    border:8px solid var(--surface);
+    background:var(--surface);
+    box-shadow:var(--shadow-lg);
+    overflow:hidden;
+    position:relative;
+    display:flex; flex-direction:column;
+  }
+  .phone-notch{
+    position:absolute; top:0; left:50%; transform:translateX(-50%);
+    width:120px; height:22px; background:var(--surface);
+    border-radius:0 0 14px 14px; z-index:5;
+  }
+  .phone-screen{ flex:1; display:flex; flex-direction:column; background:var(--surface); min-height:0; }
+
+  .m-topbar{
+    padding:34px 18px 10px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .m-topbar h1{ font-size:20px; font-weight:700; margin:0; letter-spacing:-0.02em; }
+  .m-topbar .avatar{ margin-left:0; }
+  .m-search{
+    margin:2px 18px 12px;
+    display:flex; align-items:center; gap:7px;
+    background:var(--surface-alt); border:1px solid var(--border);
+    border-radius:9px; padding:8px 12px; color:var(--text-faint); font-size:12.5px;
+    flex-shrink:0;
+  }
+  .m-search svg{ width:14px; height:14px; }
+  .m-folder-chips{ display:flex; gap:7px; padding:0 18px 12px; flex-shrink:0; overflow-x:auto; }
+  .m-chip{
+    font-size:11.5px; padding:5px 12px; border-radius:20px; white-space:nowrap;
+    background:var(--surface-alt); border:1px solid var(--border); color:var(--text-muted);
+  }
+  .m-chip.active{ background:var(--text); color:var(--bg); border-color:var(--text); }
+  .m-list{ flex:1; overflow-y:auto; padding:0 12px; }
+  .m-note-card{
+    background:var(--surface); border:1px solid var(--border-soft);
+    border-radius:11px; padding:12px 13px; margin-bottom:9px;
+  }
+  .m-note-card .note-title{ font-size:13px; }
+  .m-note-card .note-preview{ margin-top:3px; }
+  .m-note-card .note-meta-row{ margin-top:8px; }
+
+  .m-fab{
+    position:absolute; right:18px; bottom:78px;
+    width:48px; height:48px; border-radius:50%;
+    background:var(--text); color:var(--bg);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:var(--shadow); z-index:4;
+  }
+  .m-fab svg{ width:20px; height:20px; }
+
+  .m-tabbar{
+    flex-shrink:0; display:flex; justify-content:space-around;
+    padding:10px 10px calc(14px);
+    border-top:1px solid var(--border);
+    background:var(--surface);
+  }
+  .m-tabbar div{ display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--text-faint); font-size:9.5px; }
+  .m-tabbar div.active{ color:var(--text); }
+  .m-tabbar svg{ width:19px; height:19px; }
+
+  .m-editor-topbar{
+    padding:16px 14px 8px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .m-editor-topbar svg{ width:20px; height:20px; color:var(--text-muted); }
+  .m-editor-topbar .right-icons{ display:flex; gap:14px; align-items:center; }
+  .m-editor-scroll{ flex:1; overflow-y:auto; padding:6px 18px 20px; }
+  .m-editor-scroll .editor-title{ font-size:19px; margin-bottom:14px; }
+  .m-editor-scroll .b-h{ font-size:14px; }
+  .m-editor-scroll .b-p, .m-editor-scroll .b-ul{ font-size:13px; }
+  .m-toolbar{
+    flex-shrink:0; display:flex; gap:0; justify-content:space-around; align-items:center;
+    padding:8px 6px; border-top:1px solid var(--border); background:var(--surface-alt);
+  }
+  .m-toolbar svg{ width:18px; height:18px; color:var(--text-muted); }
+
+  .m-inner-tabs{
+    display:flex; gap:4px; margin:0 18px 10px; background:var(--surface-alt);
+    border:1px solid var(--border); border-radius:8px; padding:2px; flex-shrink:0;
+  }
+  .m-inner-tabs button{
+    flex:1; border:none; background:transparent; padding:6px 0; border-radius:6px;
+    font-family:inherit; font-size:11.5px; font-weight:500; color:var(--text-muted); cursor:pointer;
+  }
+  .m-inner-tabs button.active{ background:var(--surface); color:var(--text); box-shadow:var(--shadow); }
+  .m-screen-panel{ display:none; flex-direction:column; flex:1; min-height:0; }
+  .m-screen-panel.active{ display:flex; }
+
+  @media (max-width:1100px){
+    .mac-window,.win-window,.web-window{ width:96vw; }
+  }
+</style>
+</head>
+<body data-theme="light">
+
+  <header class="page-header">
+    <div class="brand">
+      <div class="brand-mark">N</div>
+      <div class="brand-name">Noote</div>
+      <div class="brand-sub">UI concepts</div>
+    </div>
+
+    <div class="controls">
+      <div class="platform-tabs" id="platformTabs">
+        <button data-target="mobile" class="active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="2" width="10" height="20" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+          Mobile
+        </button>
+        <button data-target="web">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18"/></svg>
+          Web
+        </button>
+        <button data-target="windows">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="8" height="8"/><rect x="13" y="4" width="8" height="8"/><rect x="3" y="14" width="8" height="8"/><rect x="13" y="14" width="8" height="8"/></svg>
+          Windows
+        </button>
+        <button data-target="mac">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16.5 4a3.5 3.5 0 0 0-3 1.7A3.4 3.4 0 0 0 10.6 4a4 4 0 0 0-3.4 6.1c1.4 2.3 4 5.6 4.8 5.6s3.4-3.3 4.8-5.6A4 4 0 0 0 16.5 4Z"/></svg>
+          macOS
+        </button>
+      </div>
+
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+        <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="stage">
+
+    <!-- ===================== MOBILE ===================== -->
+    <section class="platform-view active" id="view-mobile">
+      <div class="mobile-row">
+
+        <!-- Phone 1: Notes list -->
+        <div>
+          <div class="phone">
+            <div class="phone-notch"></div>
+            <div class="phone-screen">
+              <div class="m-topbar">
+                <h1>Notes</h1>
+                <div class="avatar" style="background:var(--avatar-2)">RS</div>
+              </div>
+              <div class="m-search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.6" y2="16.6"/></svg>
+                Search notes
+              </div>
+              <div class="m-folder-chips">
+                <div class="m-chip active">All</div>
+                <div class="m-chip">Work</div>
+                <div class="m-chip">Personal</div>
+                <div class="m-chip">Shared</div>
+              </div>
+              <div class="m-list">
+                <div class="m-note-card">
+                  <div class="note-item-top">
+                    <div class="note-title">Local-First Sync Architecture</div>
+                    <div class="note-time">2m</div>
+                  </div>
+                  <div class="note-preview">Every write hits the local SQLite database first. PowerSync then pushes changes once we're back online.</div>
+                  <div class="note-meta-row">
+                    <span class="tag-chip">Engineering</span>
+                    <div class="avatar-stack" style="margin-left:auto">
+                      <div class="avatar" style="width:16px;height:16px;font-size:8px;background:var(--avatar-1)">JM</div>
+                      <div class="avatar" style="width:16px;height:16px;font-size:8px;background:var(--avatar-3)">KP</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="m-note-card">
+                  <div class="note-item-top"><div class="note-title">Sprint Retro — Aug 18</div><div class="note-time">1h</div></div>
+                  <div class="note-preview">What went well: shipped the offline queue. What didn't: table merge conflicts on edit.</div>
+                </div>
+                <div class="m-note-card">
+                  <div class="note-item-top"><div class="note-title">Grocery List</div><div class="note-time">Yesterday</div></div>
+                  <div class="note-preview">Oat milk, coffee beans, basil, parmesan, eggs.</div>
+                </div>
+                <div class="m-note-card">
+                  <div class="note-item-top"><div class="note-title">Book notes: Deep Work</div><div class="note-time">Mon</div></div>
+                  <div class="note-preview">Chapter 2 — the value of sustained, undistracted focus over shallow busywork.</div>
+                </div>
+              </div>
+              <div class="m-fab">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </div>
+              <div class="m-tabbar">
+                <div class="active">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+                  Notes
+                </div>
+                <div>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="7" height="7" rx="1"/><rect x="14" y="4" width="7" height="7" rx="1"/><rect x="3" y="13" width="7" height="7" rx="1"/><rect x="14" y="13" width="7" height="7" rx="1"/></svg>
+                  Folders
+                </div>
+                <div>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6"/></svg>
+                  Shared
+                </div>
+                <div>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>
+                  Settings
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="caption">Notes list</div>
+        </div>
+
+        <!-- Phone 2: Editor -->
+        <div>
+          <div class="phone">
+            <div class="phone-notch"></div>
+            <div class="phone-screen">
+              <div class="m-editor-topbar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 18l-6-6 6-6"/></svg>
+                <div class="right-icons">
+                  <div class="sync-status"><span class="sync-dot"></span>Synced</div>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.6" x2="15.4" y2="6.4"/><line x1="8.6" y1="13.4" x2="15.4" y2="17.6"/></svg>
+                </div>
+              </div>
+              <div class="m-editor-scroll">
+                <div class="editor-title">Local-First Sync Architecture</div>
+
+                <div class="block-row">
+                  <div class="block-rail">H</div>
+                  <div class="block-content"><div class="b-h">Overview</div></div>
+                </div>
+                <div class="block-row">
+                  <div class="block-rail"></div>
+                  <div class="block-content"><p class="b-p">Every write hits the local SQLite database first. PowerSync pushes changes to Postgres once we're back online.</p></div>
+                </div>
+                <div class="block-row">
+                  <div class="block-rail">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="5" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="5" cy="18" r="1.5" fill="currentColor" stroke="none"/><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/></svg>
+                  </div>
+                  <div class="block-content">
+                    <ul class="b-ul">
+                      <li>Drift for local storage</li>
+                      <li>PowerSync for sync</li>
+                      <li>Supabase for backend + auth</li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="block-row">
+                  <div class="block-rail">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                  </div>
+                  <div class="block-content">
+                    <div class="b-code">
+                      <div class="b-code-lang">dart</div>
+                      <pre><span class="kw">final</span> note = <span class="kw">await</span> repo.watchNote(id);</pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="m-toolbar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 4h9a4 4 0 0 1 0 8H6z"/><path d="M6 12h10a4 4 0 0 1 0 8H6z"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="17" x2="18" y2="17"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/><polyline points="21 15 16 10 5 21"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+              </div>
+            </div>
+          </div>
+          <div class="caption">Note editor</div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ===================== WEB ===================== -->
+    <section class="platform-view" id="view-web">
+      <div class="web-window">
+        <div class="web-chrome">
+          <div class="web-tabbar">
+            <div class="web-tab"><div class="favicon"></div>Noote — Local-First Sync Arch…</div>
+          </div>
+          <div class="web-addr-row">
+            <div class="web-nav-icons">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2.2-9.4L23 10"/></svg>
+            </div>
+            <div class="web-address">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+              app.noote.com/n/sync-architecture
+            </div>
+          </div>
+        </div>
+
+        <div class="app-shell">
+          <aside class="sidebar">
+            <div class="sidebar-search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.6" y2="16.6"/></svg>
+              Search
+            </div>
+            <div class="nav-section-label">Folders</div>
+            <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>Work<span class="count">12</span></div>
+            <div class="nav-item nested active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>Engineering<span class="count">5</span></div>
+            <div class="nav-item nested"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>Product Specs<span class="count">7</span></div>
+            <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>Personal<span class="count">9</span></div>
+            <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6"/></svg>Shared with me<span class="count">3</span></div>
+            <div class="nav-section-label">Tags</div>
+            <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.6 12.3 12.3 4H5a1 1 0 0 0-1 1v7.3l8.3 8.3a1 1 0 0 0 1.4 0l7-7a1 1 0 0 0 0-1.3Z"/><circle cx="8.5" cy="8.5" r="1" fill="currentColor" stroke="none"/></svg>ideas</div>
+            <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.6 12.3 12.3 4H5a1 1 0 0 0-1 1v7.3l8.3 8.3a1 1 0 0 0 1.4 0l7-7a1 1 0 0 0 0-1.3Z"/><circle cx="8.5" cy="8.5" r="1" fill="currentColor" stroke="none"/></svg>recipes</div>
+            <div class="sidebar-footer">
+              <span class="storage-dot"></span>
+              <span>All changes synced</span>
+            </div>
+          </aside>
+
+          <div class="notes-list">
+            <div class="list-header"><h2>Engineering</h2><button class="new-note-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></div>
+            <div class="note-item active">
+              <div class="note-item-top"><span class="note-title">Local-First Sync Architecture</span><span class="note-time">2m</span></div>
+              <div class="note-preview">Every write hits the local SQLite database first. PowerSync then pushes changes to Postgres.</div>
+              <div class="note-meta-row"><span class="tag-chip">architecture</span></div>
+            </div>
+            <div class="note-item">
+              <div class="note-item-top"><span class="note-title">API Auth Flow</span><span class="note-time">3h</span></div>
+              <div class="note-preview">PKCE flow for web, native deep link for mobile/desktop, both via Supabase Auth.</div>
+            </div>
+            <div class="note-item">
+              <div class="note-item-top"><span class="note-title">Sprint Retro — Aug 18</span><span class="note-time">1d</span></div>
+              <div class="note-preview">What went well: shipped the offline queue. What didn't: table merge conflicts.</div>
+            </div>
+            <div class="note-item">
+              <div class="note-item-top"><span class="note-title">Attachment Upload Queue</span><span class="note-time">2d</span></div>
+              <div class="note-preview">Local-first cache, background upload, thumbnail generation on device.</div>
+            </div>
+          </div>
+
+          <div class="editor-pane">
+            <div class="editor-topbar">
+              <div class="breadcrumb">Work / <b>Engineering</b></div>
+              <div class="editor-actions">
+                <div class="sync-status"><span class="sync-dot"></span>Synced 2m ago</div>
+                <div class="avatar-stack">
+                  <div class="avatar" style="background:var(--avatar-1)">JM</div>
+                  <div class="avatar" style="background:var(--avatar-3)">KP</div>
+                </div>
+                <button class="share-btn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.6" x2="15.4" y2="6.4"/><line x1="8.6" y1="13.4" x2="15.4" y2="17.6"/></svg>
+                  Share
+                </button>
+              </div>
+            </div>
+
+            <div class="editor-scroll">
+              <div class="editor-title">Local-First Sync Architecture</div>
+
+              <div class="block-row">
+                <div class="block-rail">H</div>
+                <div class="block-content"><div class="b-h">Overview</div></div>
+              </div>
+              <div class="block-row">
+                <div class="block-rail"></div>
+                <div class="block-content"><p class="b-p">Every write hits the local SQLite database first — the UI never waits on a network call. PowerSync then pushes changes to Postgres once the device is back online, and pulls down changes made elsewhere.</p></div>
+              </div>
+              <div class="block-row">
+                <div class="block-rail">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="5" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="5" cy="18" r="1.5" fill="currentColor" stroke="none"/><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/></svg>
+                </div>
+                <div class="block-content">
+                  <ul class="b-ul">
+                    <li>Drift for local storage (SQLite)</li>
+                    <li>PowerSync for offline-first sync</li>
+                    <li>Supabase for backend, auth, and storage</li>
+                  </ul>
+                </div>
+              </div>
+              <div class="block-row">
+                <div class="block-rail">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                </div>
+                <div class="block-content">
+                  <div class="b-code">
+                    <div class="b-code-lang">dart</div>
+                    <pre><span class="kw">final</span> note = <span class="kw">await</span> notesRepository.watchNote(noteId);
+<span class="kw">final</span> status = syncStatusProvider.value;</pre>
+                  </div>
+                </div>
+              </div>
+              <div class="block-row">
+                <div class="block-rail">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="1"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="11" y1="10" x2="11" y2="20"/></svg>
+                </div>
+                <div class="block-content">
+                  <table class="b-table">
+                    <tr><th>Layer</th><th>Tool</th></tr>
+                    <tr><td>Local DB</td><td>Drift</td></tr>
+                    <tr><td>Sync</td><td>PowerSync</td></tr>
+                    <tr><td>Backend</td><td>Supabase</td></tr>
+                  </table>
+                </div>
+              </div>
+              <div class="block-row">
+                <div class="block-rail">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/><polyline points="21 15 16 10 5 21"/></svg>
+                </div>
+                <div class="block-content">
+                  <div class="b-image">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/><polyline points="21 15 16 10 5 21"/></svg>
+                    architecture-diagram.png — synced
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">Web — three-pane layout with browser chrome</div>
+    </section>
+
+    <!-- ===================== WINDOWS ===================== -->
+    <section class="platform-view" id="view-windows">
+      <div class="win-window">
+        <div class="win-titlebar">
+          <div class="wtitle-group">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            <span class="wtitle">Noote — Local-First Sync Architecture</span>
+          </div>
+          <div class="win-controls">
+            <div><svg viewBox="0 0 10 10"><line x1="0" y1="5" x2="10" y2="5" stroke="currentColor" stroke-width="1"/></svg></div>
+            <div><svg viewBox="0 0 10 10"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg></div>
+            <div class="close"><svg viewBox="0 0 10 10"><line x1="0" y1="0" x2="10" y2="10" stroke="currentColor" stroke-width="1"/><line x1="10" y1="0" x2="0" y2="10" stroke="currentColor" stroke-width="1"/></svg></div>
+          </div>
+        </div>
+        <div class="win-menubar">
+          <span>File</span><span>Edit</span><span>View</span><span>Insert</span><span>Format</span><span>Help</span>
+        </div>
+
+        <div class="app-shell">
+          <aside class="sidebar">
+            <div class="sidebar-search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.6" y2="16.6"/></svg>
+              Search
+            </div>
+            <div class="nav-section-label">Folders</div>
+            <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>Work<span class="count">12</span></div>
+            <div class="nav-item nested active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>Engineering<span class="count">5</span></div>
+            <div class="nav-item nested"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>Product Specs<span class="count">7</span></div>
+            <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>Personal<span class="count">9</span></div>
+            <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6"/></svg>Shared with me<span class="count">3</span></div>
+            <div class="sidebar-footer">
+              <span class="storage-dot"></span>
+              <span>All changes synced</span>
+            </div>
+          </aside>
+
+          <div class="notes-list">
+            <div class="list-header"><h2>Engineering</h2><button class="new-note-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></div>
+            <div class="note-item active">
+              <div class="note-item-top"><span class="note-title">Local-First Sync Architecture</span><span class="note-time">2m</span></div>
+              <div class="note-preview">Every write hits the local SQLite database first. PowerSync then pushes changes to Postgres.</div>
+              <div class="note-meta-row"><span class="tag-chip">architecture</span></div>
+            </div>
+            <div class="note-item">
+              <div class="note-item-top"><span class="note-title">API Auth Flow</span><span class="note-time">3h</span></div>
+              <div class="note-preview">PKCE flow for web, native deep link for mobile/desktop, both via Supabase Auth.</div>
+            </div>
+            <div class="note-item">
+              <div class="note-item-top"><span class="note-title">Sprint Retro — Aug 18</span><span class="note-time">1d</span></div>
+              <div class="note-preview">What went well: shipped the offline queue. What didn't: table merge conflicts.</div>
+            </div>
+          </div>
+
+          <div class="editor-pane">
+            <div class="editor-topbar">
+              <div class="breadcrumb">Work / <b>Engineering</b></div>
+              <div class="editor-actions">
+                <div class="sync-status"><span class="sync-dot"></span>Synced 2m ago</div>
+                <div class="avatar-stack">
+                  <div class="avatar" style="background:var(--avatar-1)">JM</div>
+                  <div class="avatar" style="background:var(--avatar-3)">KP</div>
+                </div>
+                <button class="share-btn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.6" x2="15.4" y2="6.4"/><line x1="8.6" y1="13.4" x2="15.4" y2="17.6"/></svg>
+                  Share
+                </button>
+              </div>
+            </div>
+
+            <div class="editor-scroll">
+              <div class="editor-title">Local-First Sync Architecture</div>
+              <div class="block-row">
+                <div class="block-rail">H</div>
+                <div class="block-content"><div class="b-h">Overview</div></div>
+              </div>
+              <div class="block-row">
+                <div class="block-rail"></div>
+                <div class="block-content"><p class="b-p">Every write hits the local SQLite database first — the UI never waits on a network call. PowerSync then pushes changes to Postgres once the device is back online.</p></div>
+              </div>
+              <div class="block-row">
+                <div class="block-rail">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="5" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="5" cy="18" r="1.5" fill="currentColor" stroke="none"/><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/></svg>
+                </div>
+                <div class="block-content">
+                  <ul class="b-ul">
+                    <li>Drift for local storage (SQLite)</li>
+                    <li>PowerSync for offline-first sync</li>
+                    <li>Supabase for backend, auth, and storage</li>
+                  </ul>
+                </div>
+              </div>
+              <div class="block-row">
+                <div class="block-rail">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="1"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="11" y1="10" x2="11" y2="20"/></svg>
+                </div>
+                <div class="block-content">
+                  <table class="b-table">
+                    <tr><th>Layer</th><th>Tool</th></tr>
+                    <tr><td>Local DB</td><td>Drift</td></tr>
+                    <tr><td>Sync</td><td>PowerSync</td></tr>
+                    <tr><td>Backend</td><td>Supabase</td></tr>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">Windows — menu bar + native window controls</div>
+    </section>
+
+    <!-- ===================== MACOS ===================== -->
+    <section class="platform-view" id="view-mac">
+      <div class="mac-window">
+        <div class="mac-titlebar">
+          <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+          <div class="wtitle">Local-First Sync Architecture — Noote</div>
+        </div>
+
+        <div class="app-shell">
+          <aside class="sidebar">
+            <div class="sidebar-search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.6" y2="16.6"/></svg>
+              Search
+            </div>
+            <div class="nav-section-label">Folders</div>
+            <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>Work<span class="count">12</span></div>
+            <div class="nav-item nested active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>Engineering<span class="count">5</span></div>
+            <div class="nav-item nested"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>Product Specs<span class="count">7</span></div>
+            <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>Personal<span class="count">9</span></div>
+            <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6"/></svg>Shared with me<span class="count">3</span></div>
+            <div class="nav-section-label">Tags</div>
+            <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.6 12.3 12.3 4H5a1 1 0 0 0-1 1v7.3l8.3 8.3a1 1 0 0 0 1.4 0l7-7a1 1 0 0 0 0-1.3Z"/><circle cx="8.5" cy="8.5" r="1" fill="currentColor" stroke="none"/></svg>ideas</div>
+            <div class="sidebar-footer">
+              <span class="storage-dot"></span>
+              <span>All changes synced</span>
+            </div>
+          </aside>
+
+          <div class="notes-list">
+            <div class="list-header"><h2>Engineering</h2><button class="new-note-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></div>
+            <div class="note-item active">
+              <div class="note-item-top"><span class="note-title">Local-First Sync Architecture</span><span class="note-time">2m</span></div>
+              <div class="note-preview">Every write hits the local SQLite database first. PowerSync then pushes changes to Postgres.</div>
+              <div class="note-meta-row"><span class="tag-chip">architecture</span></div>
+            </div>
+            <div class="note-item">
+              <div class="note-item-top"><span class="note-title">API Auth Flow</span><span class="note-time">3h</span></div>
+              <div class="note-preview">PKCE flow for web, native deep link for mobile/desktop, both via Supabase Auth.</div>
+            </div>
+            <div class="note-item">
+              <div class="note-item-top"><span class="note-title">Sprint Retro — Aug 18</span><span class="note-time">1d</span></div>
+              <div class="note-preview">What went well: shipped the offline queue. What didn't: table merge conflicts.</div>
+            </div>
+            <div class="note-item">
+              <div class="note-item-top"><span class="note-title">Attachment Upload Queue</span><span class="note-time">2d</span></div>
+              <div class="note-preview">Local-first cache, background upload, thumbnail generation on device.</div>
+            </div>
+          </div>
+
+          <div class="editor-pane">
+            <div class="editor-topbar">
+              <div class="breadcrumb">Work / <b>Engineering</b></div>
+              <div class="editor-actions">
+                <div class="sync-status"><span class="sync-dot"></span>Synced 2m ago</div>
+                <div class="avatar-stack">
+                  <div class="avatar" style="background:var(--avatar-1)">JM</div>
+                  <div class="avatar" style="background:var(--avatar-3)">KP</div>
+                </div>
+                <button class="share-btn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.6" x2="15.4" y2="6.4"/><line x1="8.6" y1="13.4" x2="15.4" y2="17.6"/></svg>
+                  Share
+                </button>
+              </div>
+            </div>
+
+            <div class="editor-scroll">
+              <div class="editor-title">Local-First Sync Architecture</div>
+              <div class="block-row">
+                <div class="block-rail">H</div>
+                <div class="block-content"><div class="b-h">Overview</div></div>
+              </div>
+              <div class="block-row">
+                <div class="block-rail"></div>
+                <div class="block-content"><p class="b-p">Every write hits the local SQLite database first — the UI never waits on a network call. PowerSync then pushes changes to Postgres once the device is back online, and pulls down changes made elsewhere.</p></div>
+              </div>
+              <div class="block-row">
+                <div class="block-rail">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="5" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="5" cy="18" r="1.5" fill="currentColor" stroke="none"/><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/></svg>
+                </div>
+                <div class="block-content">
+                  <ul class="b-ul">
+                    <li>Drift for local storage (SQLite)</li>
+                    <li>PowerSync for offline-first sync</li>
+                    <li>Supabase for backend, auth, and storage</li>
+                  </ul>
+                </div>
+              </div>
+              <div class="block-row">
+                <div class="block-rail">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                </div>
+                <div class="block-content">
+                  <div class="b-code">
+                    <div class="b-code-lang">dart</div>
+                    <pre><span class="kw">final</span> note = <span class="kw">await</span> notesRepository.watchNote(noteId);</pre>
+                  </div>
+                </div>
+              </div>
+              <div class="block-row">
+                <div class="block-rail">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/><polyline points="21 15 16 10 5 21"/></svg>
+                </div>
+                <div class="block-content">
+                  <div class="b-image">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/><polyline points="21 15 16 10 5 21"/></svg>
+                    architecture-diagram.png — synced
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">macOS — traffic-light window controls</div>
+    </section>
+
+  </main>
+
+<script>
+  const tabs = document.querySelectorAll('#platformTabs button');
+  const views = document.querySelectorAll('.platform-view');
+  tabs.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tabs.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const target = btn.dataset.target;
+      views.forEach(v => v.classList.remove('active'));
+      document.getElementById('view-' + target).classList.add('active');
+    });
+  });
+
+  const themeToggle = document.getElementById('themeToggle');
+  themeToggle.addEventListener('click', () => {
+    const body = document.body;
+    body.dataset.theme = body.dataset.theme === 'dark' ? 'light' : 'dark';
+  });
+</script>
+
+</body>
+</html>
