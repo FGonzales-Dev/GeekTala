@@ -13,10 +13,10 @@
 | Cross-platform framework | **Flutter** (targets: macOS, Windows, Linux, iOS, Android, **Web**) | Single codebase for all 6 targets; mature SQLite tooling; strong offline story; Flutter Web is a first-class build target alongside the rest |
 | State management | **Riverpod** | Pairs naturally with Drift's reactive streams; less boilerplate than Bloc for this use case |
 | Local database | **Drift** (SQLite wrapper) — native SQLite on desktop/mobile, **`drift_wasm` (sql.js/OPFS-backed) on Web** | Type-safe, code-gen, reactive queries; Drift has a dedicated web backend so the same DAO/repository code works unmodified — only the database initialization differs per platform |
-| Backend database | **Supabase (Postgres)** | Postgres is the native fit for PowerSync, relational model suits notes/folders/tags/sharing, built-in Row Level Security for permissions |
-| Backend business logic | **Postgres stored procedures (plpgsql), called via Supabase RPC — no direct table writes from the client** | Centralizes validation, permission checks, and conflict-merge logic (see §6) atomically inside Postgres instead of scattering it across the Flutter app and PowerSync connector; the client/connector surface becomes a thin set of RPC calls. See §5 for the procedure list and §4 for where this plugs into the sync layer |
-| Sync engine | **PowerSync** | Purpose-built for offline-first SQLite ↔ Postgres sync; handles offline queue, retries, and partial/scoped sync via "Sync Streams"/buckets; integrates directly with Supabase (reads the Postgres WAL); ships an official **Web SDK** alongside Flutter/mobile, so the sync layer is not a web-specific fork |
-| Auth | **Supabase Auth** | Native pairing with Supabase + PowerSync; same flow works on web via redirect/PKCE |
+| Backend database | **Supabase (Postgres)** | Relational model suits notes/folders/tags/sharing, built-in Row Level Security for permissions |
+| Backend business logic | **Postgres stored procedures (plpgsql), called via Supabase RPC — no direct table writes from the client** | Centralizes validation, permission checks, and conflict-merge logic (see §6) atomically inside Postgres instead of scattering it across the Flutter app and its sync code; the client/sync surface becomes a thin set of RPC calls. See §5 for the procedure list and §4 for where this plugs into the sync layer |
+| Sync engine | **None — app code: local outbox + `push_changes` RPC** *(replaced PowerSync 2026-11-09)* | No extra service to host or pay for. SQLite triggers log every local change to an outbox; **Upload** sends it to one Postgres function in batches, **Download** replaces local data with the server copy (plain Supabase queries under RLS). Manual (buttons in Settings) for now — see §6. Works on web too, since it's only Supabase + Drift calls |
+| Auth | **Supabase Auth** | Native pairing with Supabase; same flow works on web via redirect/PKCE |
 | Navigation | **go_router** | Declarative, URL-based; handles desktop window states and deep-linking better than manual Navigator 2.0 — also gives Web real, shareable URLs per note/folder "for free" |
 | Model classes | **freezed** | Immutability + copyWith, useful when sync callbacks update fields |
 | Rich text editor | **appflowy_editor** (6.x) | Tree-based node model (supports nesting for lists/tables, unlike flat-list editors); core ships paragraph, headings, lists, quote, todo, table, image, and divider block components; supports markdown import/export and construction from JSON/Markdown/Quill Delta; **confirmed web platform support** |
@@ -86,9 +86,9 @@ lib/
       tables/                  # notes.dart, folders.dart, tags.dart, attachments.dart, shares.dart
       daos/                    # NotesDao, FoldersDao, etc.
     sync/
-      powersync_client.dart
-      sync_connector.dart        # uploadData() translates local CRUD -> Supabase RPC calls (stored procedures), never raw table writes
-      sync_status_provider.dart
+      sync_service.dart          # upload: outbox -> push_changes RPC (never raw table writes); download: replace local copy
+      sync_remote.dart           # Supabase calls behind an interface (faked in tests)
+      pending_writes.dart        # flushes the editor's debounced saves before a sync
     repositories/
       notes_repository.dart        # wraps DAO, exposes clean streams, hides Drift details
       folders_repository.dart
@@ -128,10 +128,10 @@ lib/
 | Repositories | Combine DAOs + expose clean streams/futures | Know about widgets |
 | Riverpod providers/notifiers | Screen-level state, loading/error handling | Direct DB/SQL access |
 | Widgets | Render state, dispatch user actions | Business logic, DB access |
-| Sync layer | PowerSync connection, connector (auth + upload), sync status stream | UI concerns |
+| Sync layer | `SyncService` (outbox upload, full download, account switching), `SupabaseSyncRemote`, sync status | UI concerns |
 | Postgres (stored procedures) | Validation, permission checks, block-level conflict merge, all row mutations | Own client-side state; never called directly by widgets/providers — only reached via the sync connector's upload path |
 
-Note: reads are unaffected by this — PowerSync pulls data down via logical replication ("sync rules"/buckets, see §6), not RPC. The stored-procedure requirement applies to **writes only**: every insert/update/delete that reaches Postgres, whether from the app or (later) any admin tooling, goes through a named procedure, never a bare `INSERT`/`UPDATE`/`DELETE` against a table from client code.
+Note: reads are unaffected by this — Download reads the tables directly, limited to the caller's rows by RLS (see §6), not via RPC. The stored-procedure requirement applies to **writes only**: every insert/update/delete that reaches Postgres, whether from the app or (later) any admin tooling, goes through a named procedure, never a bare `INSERT`/`UPDATE`/`DELETE` against a table from client code.
 
 ---
 
@@ -203,6 +203,16 @@ Each procedure re-checks the caller's permission (via `folder_shares`/`note_shar
 
 ## 6. Sync & Conflict Resolution
 
+> **What's built (2026-11-09):** manual, whole-row sync with no sync server — this replaces PowerSync and is simpler than the block-level design below, which remains the goal.
+> - SQLite triggers (`lib/data/database/sync.drift`) log every local insert/update/delete into a `sync_outbox` table, one entry per record.
+> - **Upload** (`lib/data/sync/sync_service.dart`) sends the outbox to `push_changes(jsonb)` in batches of ≤100; each batch is one server transaction, and outbox entries are removed only after the server accepts them.
+> - Conflicts: **newest `updated_at` wins per note/folder** (device clock); older incoming edits are skipped and reported. No per-block merge yet.
+> - **Download** replaces all local data with the server copy (paged reads under RLS) and refuses to run while changes are waiting to upload unless the user chooses to discard them.
+> - Trash is a tombstone (`is_deleted`), as below. **Delete forever is a real delete** on the server too — with full-replace downloads nothing can "revive" it, and a tombstone would bring it back into the trash.
+> - Primary keys are `(owner_id, id)`, so seeded ids like `personal` don't clash between accounts.
+> - If a different account signs in on a device, its local data is cleared first (`SyncService.adoptAccount`).
+> - **Automatic sync** (on by default; Settings → "Sync automatically"; `_AutoSync` in `lib/data/providers/sync_provider.dart`): uploads 5 s after changes appear (back-off on failure), uploads right away when the app goes to the background, and on open / sign-in / return after 5+ min uploads anything waiting then runs a full Download. A Download that finds new local edits is skipped (no editor reload). Still whole-copy downloads — fetching only what changed needs server-set timestamps on every table plus a deletion log.
+
 **Chosen approach: V1 — Async co-editing (block-level last-write-wins)**
 
 - Every write goes to the local Drift/SQLite database first — UI never waits on network.
@@ -217,7 +227,7 @@ Each procedure re-checks the caller's permission (via `folder_shares`/`note_shar
 
 **Sharing/permissions enforcement:**
 - Supabase **Row Level Security** policies enforce access based on `folder_shares` / `note_shares`.
-- PowerSync **sync rules ("buckets")** scope which rows sync to which user, based on the same share tables — a user only pulls notes/folders they own or have been shared into.
+- Download's queries are limited by those same RLS policies, so a user only pulls notes/folders they own or have been shared into.
 
 **Testing requirement:** deliberately test conflict scenarios — airplane mode edits, two devices/users editing the same note, same table cell edited concurrently (must merge per-cell, not per-whole-table).
 
@@ -236,10 +246,23 @@ Each procedure re-checks the caller's permission (via `folder_shares`/`note_shar
 - Add `markdown_converter.dart` service wrapping this.
 - Features: "Import .md file" (notes list), "Export as Markdown" (note editor menu).
 - **Must verify round-trip fidelity** (JSON → Markdown → JSON) for tables and code blocks specifically before relying on it — markdown table syntax is more limited than the rich table node.
+- **Pasting Markdown (built 2026-11-09):** ⌘V/Ctrl+V with text that looks like Markdown (`looksLikeMarkdown` in `markdown_convert.dart`) pastes it formatted, or as the raw text per Settings → "When pasting Markdown"; a bar over the editor then offers the other version until the next edit (swap = restore the pre-paste note and paste again). Other text pastes as before; ⌘⇧V still pastes raw. Mobile: "Paste Markdown" in the editor's ••• menu (the phone's paste menu bypasses the editor's paste shortcut). appflowy_editor's converter drops fenced code blocks, so `noteMarkdownToDocument` adds a parser for them (code-styled paragraph, until real code blocks exist) — used by import too.
+- Not built yet: a whole-note Markdown source view (risk: Markdown can't hold text colors/highlights).
+
+### Organizing notes and folders (built 2026-11-09)
+- Desktop/web: drag a note (or a ⌘/Ctrl- or Shift-click selection of notes) from the notes list onto a sidebar folder, or onto Recently Deleted. Drag a folder onto another folder (middle of the row = inside it; top/bottom edge = above/below it, i.e. reorder), onto the "Folders" heading (first at the top level), or onto Recently Deleted (the usual delete dialog). Every move/delete shows an Undo snack bar. The sidebar auto-scrolls while dragging near its edges.
+- Mobile: notes and folders are on separate tabs, so no dragging — the long-press menus have "Move to…" (a folder picker), also in the desktop right-click menus.
+- Rules (`FolderTree.canMove`): a folder can't go into itself or its subfolders; Personal and Shared only move within the top level.
+- Folder order is `folders.sort_order` (a fraction: a dropped folder gets the midpoint of its neighbours; the list is renumbered only when there's no room). A move is an ordinary edit (bumps `updated_at`), so sync needs nothing special.
+- A folder whose parent is missing, or that's in a parent loop (two devices moved folders into each other), is shown at the top level instead of disappearing.
+
+### Tags & settings (built 2026-11-09)
+- Tags: right-click/long-press a tag in the sidebar, or in a note's tag picker (the way in on mobile) → Rename / Delete. Delete removes the tag from its notes (they stay) and offers Undo. Tag ids are derived from the name (uuid v5) so the same new tag on two devices merges; a new tag reusing a renamed tag's old name gets a random id instead.
+- Device settings (theme, pane widths, paste-Markdown, auto sync) are remembered per device in the local `sync_state` key/value table (`deviceSettingsProvider`), never uploaded.
 
 ### Photo attachments
 - Saved to local storage immediately on attach (offline-first, usable right away) — filesystem on native platforms, browser storage (IndexedDB/OPFS) on Web.
-- Background upload queue to Supabase Storage, decoupled from PowerSync's row sync.
+- Background upload queue to Supabase Storage, decoupled from the row sync (§6).
 - Thumbnail generated on-device for list previews; full-res fetched on demand.
 - On another device/browser: note body syncs first (fast/small); images show a loading/placeholder state until the attachment downloads.
 
@@ -266,7 +289,7 @@ Each procedure re-checks the caller's permission (via `folder_shares`/`note_shar
   - **File/attachment storage**: no filesystem access — the "local cache" for pending photo uploads lives in browser storage (IndexedDB/OPFS blobs) instead of a file path; `attachments.local_cache_path` becomes a browser-storage key on Web rather than a filesystem path. Abstract this behind `AttachmentsRepository` so the rest of the app doesn't care.
   - **Image picking/upload**: use `file_picker`/`image_picker`'s web support (browser file input) — works, but there's no native camera capture flow like mobile has.
   - **Auth**: Supabase Auth's redirect-based flow (PKCE) is required on web instead of the native deep-link flow used on mobile/desktop.
-  - **PWA/installability**: decide whether to ship it as an installable PWA (manifest + service worker) — affects offline behavior specifically in the browser (service worker caching is separate from your Drift/PowerSync offline story and only affects asset loading, not data).
+  - **PWA/installability**: decide whether to ship it as an installable PWA (manifest + service worker) — affects offline behavior specifically in the browser (service worker caching is separate from your Drift/outbox offline story and only affects asset loading, not data).
   - **Browser storage limits/eviction**: browsers can evict IndexedDB/OPFS data under storage pressure (especially without PWA installation) — worth surfacing a "last synced" indicator so users trust that a local wipe won't silently lose data once it's synced.
 
 ---
@@ -278,18 +301,17 @@ Each procedure re-checks the caller's permission (via `folder_shares`/`note_shar
 | Component | Local dev approach |
 |---|---|
 | Supabase | **Supabase CLI** (`supabase init`, `supabase start`) — spins up Postgres, Auth, Storage, Realtime, and Studio locally via Docker; no hosted project needed until deploying |
-| PowerSync | **Self-hosted PowerSync (open source) service**, run via Docker, pointed at the local Supabase Postgres instance — the hosted PowerSync Cloud service can't reach `localhost`, so local end-to-end sync testing requires the self-hosted service, not the cloud one |
 | Migrations | Supabase CLI migrations (`supabase migration new`, `supabase db push`) — `supabase/migrations/` is the source of truth, applied to local and hosted projects alike; table DDL and the stored procedures from §5 both live here |
 | Seed data | `supabase/seed.sql` — realistic notes/folders/tags/shares fixtures loaded on every `supabase start` |
-| Environment switching | `--dart-define` (or `.env` via `flutter_dotenv`) for `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `POWERSYNC_URL` — same codebase points at local vs. staging vs. prod with no code changes |
+| Environment switching | Defaults point at local Supabase; `--dart-define-from-file=config/prod.json` (copy `config/prod.example.json`, git-ignored) sets `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` — same codebase points at local vs. prod with no code changes |
 | Requirements | Docker Desktop (or compatible), Supabase CLI (`brew install supabase/tap/supabase`) |
 
 Notes:
 - Local Supabase Studio (`http://localhost:54323` by default) is the fastest way to inspect rows/RLS while debugging sync.
-- Author and test RLS policies and PowerSync sync rules against the local stack first — much tighter iteration loop than against a hosted project, and mistakes here are cheap to fix locally vs. after real user data exists.
+- Author and test RLS policies and `push_changes` against the local stack first — much tighter iteration loop than against a hosted project, and mistakes here are cheap to fix locally vs. after real user data exists.
 - Consider running `supabase start` in CI for integration tests against a real (local) Postgres instance rather than mocking the database layer.
-- This slots in at Build Order step 6 below ("Wire up sync") — stand up local Supabase + local PowerSync before ever pointing at a hosted project.
-- **Day-to-day startup**, now that both are real *(2026-09-02)*: `supabase start` (Postgres/Auth/Studio/etc.) and, separately, `cd powersync && docker compose up -d` (the self-hosted PowerSync service — its own `docker-compose.yaml`, not part of the Supabase CLI's containers). Both need to be up for the app's sync to actually connect; the app itself degrades gracefully (offline) if either isn't running.
+- This slots in at Build Order step 6 below ("Wire up sync") — test against local Supabase before ever pointing at a hosted project.
+- **Day-to-day startup** *(2026-11-09)*: just `supabase start`. The app works offline without it; Upload/Download need it running.
 
 ---
 
@@ -303,10 +325,11 @@ Notes:
 4. **Code blocks & markdown**: markdown import/export *(done 2026-09-02)* — `lib/features/note_editor/markdown_io.dart` wraps appflowy_editor's own built-in `markdownToDocument`/`documentToMarkdown` (no custom parser needed); "Import Markdown…" sits next to "+ New note" in the notes list, "Export as Markdown…" is in the note's "…" menu, both via `file_selector`. Still open: the custom `CodeBlockComponentBuilder` on `highlight` (§2 — no plugin package exists) — code is still inline `code`-styled text, not a real block; round-trip fidelity for tables/code through markdown not yet verified.
 5. **Attachments**: local-first photo capture/storage, upload queue stub (still single-user at this point).
 6. **Wire up sync** *(done 2026-09-02)*: local Supabase + self-hosted PowerSync (§9) — real, verified push **and** pull, not just wired code: `powersync/` (Docker Compose — `journeyapps/powersync-service` + a dedicated `pg-storage` Postgres for PowerSync's own bucket storage, pointed at the *existing* local Supabase Postgres via `host.docker.internal:54322`) plus the stored procedures from §5 (`upsert_note`/`delete_note`/`upsert_folder`/`delete_folder`/`upsert_tag`/`attach_tag`/`detach_tag`, `supabase/migrations/20260902141614_initial_schema.sql`). `SupabaseSyncConnector` (`lib/data/sync/sync_connector.dart`) implements `uploadData()` — re-reads each row's full current state from the local view rather than trusting a PATCH's partial diff, then calls the matching procedure; the local database itself now runs *through* PowerSync (`drift_sqlite_async`'s `SqliteAsyncDriftConnection` wrapping a `PowerSyncDatabase`, replacing the bare `NativeDatabase` — see `lib/data/database/connection/connection_native.dart`), not a separate synced copy. Confirmed end-to-end against the running app + Docker stack: created notes/folders locally → uploaded to Postgres with correct `owner_id`; added a folder server-side via RPC → a fresh local database (simulating a new device/re-install) pulled it down automatically. One gotcha worth remembering: `powersync_role` needs `ALTER ROLE powersync_role BYPASSRLS` — the replication connection has no JWT context, so the `owner_id = auth.uid()` RLS policies would otherwise hide every row from it (sync rules in `powersync/config/sync-config.yaml` are what actually apply the per-user filter when serving clients). Known gap, not solved here: seed/demo content will try to sync to whichever real account first launches against an empty local db — fine for continued dev, needs a real fix before this ships. Scoped to single-user ownership only (§ owner_id = auth.uid()); real `folder_shares`/`note_shares` permissions are still step 7.
-7. **Sharing backend**: `folder_shares`/`note_shares` tables, the `share_folder`/`share_note`/`revoke_*` stored procedures (§5), Supabase RLS policies, PowerSync sync rules scoped to shares. Budget real time for this — it's typically the most underestimated piece.
+   - *Superseded 2026-11-09:* PowerSync and the `powersync/` Docker setup were removed in favour of the manual outbox upload / full download described at the top of §6. The initial migration was rewritten (prod had never received it): no replication role or publication, `(owner_id, id)` keys, one `push_changes` function instead of the seven per-row procedures. Verified with unit tests (`test/sync_service_test.dart`) and an end-to-end run against local Supabase (upload, download on a second device, paging past 1,000 rows, stale-edit skip, per-account isolation).
+7. **Sharing backend**: `folder_shares`/`note_shares` tables, the `share_folder`/`share_note`/`revoke_*` stored procedures (§5), Supabase RLS policies scoped to shares (Download reads through them). Budget real time for this — it's typically the most underestimated piece.
 8. **Multi-device & multi-user conflict testing**: two devices/users editing the same note and same table concurrently; airplane-mode reconnect scenarios.
 9. **Auth** *(done 2026-09-02)*: email/password sign in/sign up (`lib/features/auth/auth_screen.dart`), session-gated routing (`app_router.dart`'s `redirect`, driven by `Supabase.instance.client.auth.onAuthStateChange`), Sign Out + live account email in Settings. Device linking and sharing invite flows are still step 7/8 territory (need real sharing to mean anything).
-10. **Search** *(done, revisit later)*: not FTS5 — `filterNotesByQuery` (`lib/data/models/note.dart`) does an in-memory, case-insensitive substring match over title + full body text against the already-streamed note list. Fine at current/expected local-personal-note-app scale; swap for real Drift FTS5 if/when note counts make that matter.
+10. **Search** *(done, revisit later)*: not FTS5 — `searchNotes` (`lib/data/models/note_search.dart`) matches every word of the query, in any order, case-insensitively, against title + full body text + tag names (`#word` = tags only), in memory over the already-streamed note list; notes with every word in the title come first. The notes list highlights matches and shows a snippet around the first match in the body (2026-11-09). Fine at current/expected local-personal-note-app scale; swap for real Drift FTS5 if/when note counts make that matter.
 11. **Platform polish**: native menu bars (Mac/Windows/Linux), share-sheet integration (iOS/Android), window management (desktop).
 12. **Encryption** (optional, decide early if needed — retrofitting E2E later is painful).
 
