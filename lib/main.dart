@@ -4,19 +4,18 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app.dart';
 
-// Defaults point at the local Supabase stack (`supabase start`) — never
-// the hosted project, per noote-plan.md §9. Override with
-// `--dart-define=SUPABASE_URL=...` / `SUPABASE_ANON_KEY=...` for
-// staging/prod. Android emulators can't reach the host's `127.0.0.1`
-// directly — use `--dart-define=SUPABASE_URL=http://10.0.2.2:54321`
-// there instead.
+// The production Supabase project. The publishable key is meant to ship
+// inside apps (row-level security protects the data), so it lives here.
+// To run against another project — e.g. the local stack from
+// `supabase start` — override both with `--dart-define=SUPABASE_URL=…
+// --dart-define=SUPABASE_PUBLISHABLE_KEY=…` or `--dart-define-from-file`.
 const _supabaseUrl = String.fromEnvironment(
   'SUPABASE_URL',
-  defaultValue: 'http://127.0.0.1:54321',
+  defaultValue: 'https://aascyfarypophesyvwqg.supabase.co',
 );
 const _supabasePublishableKey = String.fromEnvironment(
   'SUPABASE_PUBLISHABLE_KEY',
-  defaultValue: 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH',
+  defaultValue: 'sb_publishable_7UAIh5sGuOVclJOX7gTATQ__1taeYb7',
 );
 
 void main() async {

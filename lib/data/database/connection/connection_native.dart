@@ -1,39 +1,61 @@
+import 'dart:io';
+
 import 'package:drift/drift.dart';
-import 'package:drift_sqlite_async/drift_sqlite_async.dart';
+import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:powersync/powersync.dart';
 
-import '../../sync/powersync_schema.dart';
+const _fileName = 'noote_local.sqlite';
 
-PowerSyncDatabase? _instance;
-
-/// The single [PowerSyncDatabase] backing the app — shared between [connect]
-/// (which Drift reads/writes through) and `sync_coordinator_native.dart`
-/// (which calls `.connect()`/`.disconnect()` on it as auth state changes).
-/// PowerSync's own docs are explicit that only one instance per database
-/// file should be open at a time, so this is deliberately a singleton
-/// rather than something each call site opens independently.
-Future<PowerSyncDatabase> getPowerSyncDatabase() async {
-  final existing = _instance;
-  if (existing != null) return existing;
-
-  final dbFolder = await getApplicationDocumentsDirectory();
-  // A distinct filename from the pre-sync `noote.sqlite` — PowerSync
-  // bootstraps its own internal bookkeeping tables in this file alongside
-  // the schema-defined views, so it shouldn't share a file with one created
-  // by a plain `NativeDatabase` that never knew about PowerSync (pre-dates
-  // this — local dev data from before this change is left behind, not
-  // migrated forward; nothing worth carrying over yet at this stage).
-  final path = p.join(dbFolder.path, 'noote.powersync.sqlite');
-  final db = PowerSyncDatabase(schema: powerSyncSchema, path: path);
-  await db.initialize();
-  _instance = db;
-  return db;
+/// A plain SQLite file owned by drift. Sync with Supabase is done by app
+/// code (lib/data/sync/sync_service.dart), not by the database layer.
+///
+/// Kept in the app's private data folder (Application Support on macOS,
+/// AppData\Roaming on Windows), not Documents: on Windows, Documents is
+/// visible to the user and often synced by OneDrive, which can lock or
+/// corrupt a live database. A file left in Documents by an earlier version
+/// is moved over the first time ([moveFromDocumentsIfNeeded]).
+///
+/// `noote.powersync.sqlite` (PowerSync era) and `noote.sqlite` (before
+/// that) have different layouts and are left behind untouched.
+DatabaseConnection connect() {
+  return DatabaseConnection(
+    LazyDatabase(() async {
+      final dir = await getApplicationSupportDirectory();
+      await dir.create(recursive: true);
+      final file = File(p.join(dir.path, _fileName));
+      await moveFromDocumentsIfNeeded(
+        from: (await getApplicationDocumentsDirectory()).path,
+        to: dir.path,
+      );
+      return NativeDatabase.createInBackground(file);
+    }),
+  );
 }
 
-DatabaseConnection connect() {
-  return DatabaseConnection.delayed(
-    getPowerSyncDatabase().then(SqliteAsyncDriftConnection.new),
-  );
+/// Moves `noote_local.sqlite` (and SQLite's `-wal`/`-shm` side files, which
+/// hold recent writes) from [from] to [to], unless [to] already has one.
+@visibleForTesting
+Future<void> moveFromDocumentsIfNeeded({
+  required String from,
+  required String to,
+}) async {
+  if (p.equals(from, to)) return;
+  final old = File(p.join(from, _fileName));
+  if (!await old.exists() || await File(p.join(to, _fileName)).exists()) {
+    return;
+  }
+  for (final suffix in const ['', '-wal', '-shm']) {
+    final source = File(p.join(from, '$_fileName$suffix'));
+    if (!await source.exists()) continue;
+    final target = p.join(to, '$_fileName$suffix');
+    try {
+      await source.rename(target);
+    } on FileSystemException {
+      // Different drive: copy, then remove the original.
+      await source.copy(target);
+      await source.delete();
+    }
+  }
 }

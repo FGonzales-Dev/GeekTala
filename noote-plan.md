@@ -303,7 +303,7 @@ Each procedure re-checks the caller's permission (via `folder_shares`/`note_shar
 | Supabase | **Supabase CLI** (`supabase init`, `supabase start`) — spins up Postgres, Auth, Storage, Realtime, and Studio locally via Docker; no hosted project needed until deploying |
 | Migrations | Supabase CLI migrations (`supabase migration new`, `supabase db push`) — `supabase/migrations/` is the source of truth, applied to local and hosted projects alike; table DDL and the stored procedures from §5 both live here |
 | Seed data | `supabase/seed.sql` — realistic notes/folders/tags/shares fixtures loaded on every `supabase start` |
-| Environment switching | Defaults point at local Supabase; `--dart-define-from-file=config/prod.json` (copy `config/prod.example.json`, git-ignored) sets `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` — same codebase points at local vs. prod with no code changes |
+| Environment switching | Defaults point at the **production** project (changed 2026-11-09, so a build can't accidentally ship pointing at localhost); override `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` with `--dart-define` or `--dart-define-from-file` (see `config/prod.example.json`) to use the local stack or another project |
 | Requirements | Docker Desktop (or compatible), Supabase CLI (`brew install supabase/tap/supabase`) |
 
 Notes:
