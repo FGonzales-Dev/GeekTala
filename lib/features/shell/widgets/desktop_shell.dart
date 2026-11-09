@@ -34,6 +34,7 @@ class DesktopShell extends ConsumerWidget {
           ResizeHandle(
             onDrag: (dx) =>
                 ref.read(sidebarWidthProvider.notifier).dragBy(dx),
+            onDragEnd: () => ref.read(sidebarWidthProvider.notifier).save(),
           ),
           // Recently Deleted replaces the notes-list+editor region rather
           // than being threaded through NotesListPane's search/tag
@@ -45,6 +46,8 @@ class DesktopShell extends ConsumerWidget {
             ResizeHandle(
               onDrag: (dx) =>
                   ref.read(notesListWidthProvider.notifier).dragBy(dx),
+              onDragEnd: () =>
+                  ref.read(notesListWidthProvider.notifier).save(),
             ),
             Expanded(child: EditorPane(noteId: noteId)),
           ],
