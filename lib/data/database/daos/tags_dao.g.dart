@@ -5,6 +5,7 @@ part of 'tags_dao.dart';
 // ignore_for_file: type=lint
 mixin _$TagsDaoMixin on DatabaseAccessor<AppDatabase> {
   $TagsTableTable get tagsTable => attachedDatabase.tagsTable;
+  $NotesTagsTableTable get notesTagsTable => attachedDatabase.notesTagsTable;
   TagsDaoManager get managers => TagsDaoManager(this);
 }
 
@@ -13,4 +14,9 @@ class TagsDaoManager {
   TagsDaoManager(this._db);
   $$TagsTableTableTableManager get tagsTable =>
       $$TagsTableTableTableManager(_db.attachedDatabase, _db.tagsTable);
+  $$NotesTagsTableTableTableManager get notesTagsTable =>
+      $$NotesTagsTableTableTableManager(
+        _db.attachedDatabase,
+        _db.notesTagsTable,
+      );
 }

@@ -5,6 +5,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/tag_chip.dart';
 import '../../../data/providers/notes_providers.dart';
 import '../../../data/providers/tags_providers.dart';
+import '../../tags/tag_actions.dart';
 
 /// The open note's tags (removable) plus a button to attach more — sits
 /// under the title in `NoteEditorBody`.
@@ -133,20 +134,36 @@ class _TagPickerDialogState extends ConsumerState<_TagPickerDialog> {
                   shrinkWrap: true,
                   children: [
                     for (final tag in allTags)
-                      CheckboxListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        title: Text(tag.name),
-                        value: selected.contains(tag.id),
-                        onChanged: (checked) {
-                          final repo = ref.read(notesRepositoryProvider);
-                          if (checked ?? false) {
-                            repo.addTag(widget.noteId, tag.id);
-                          } else {
-                            repo.removeTag(widget.noteId, tag.id);
-                          }
-                        },
+                      // Right-click / long-press: Rename, Delete — the
+                      // only place to manage tags on mobile.
+                      GestureDetector(
+                        onSecondaryTapDown: (details) => showTagActionsMenu(
+                          context,
+                          ref,
+                          tag,
+                          details.globalPosition,
+                        ),
+                        onLongPressStart: (details) => showTagActionsMenu(
+                          context,
+                          ref,
+                          tag,
+                          details.globalPosition,
+                        ),
+                        child: CheckboxListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          title: Text(tag.name),
+                          value: selected.contains(tag.id),
+                          onChanged: (checked) {
+                            final repo = ref.read(notesRepositoryProvider);
+                            if (checked ?? false) {
+                              repo.addTag(widget.noteId, tag.id);
+                            } else {
+                              repo.removeTag(widget.noteId, tag.id);
+                            }
+                          },
+                        ),
                       ),
                   ],
                 ),

@@ -7,7 +7,7 @@ import '../theme/app_theme.dart';
 import 'app_icon.dart';
 
 /// `.sidebar-search` / `.m-search` — filters notes by title and body text
-/// (see [searchQueryProvider] / `filterNotesByQuery`).
+/// (see [searchQueryProvider] / `searchNotes`).
 class SearchField extends ConsumerStatefulWidget {
   const SearchField({super.key, required this.hint});
 

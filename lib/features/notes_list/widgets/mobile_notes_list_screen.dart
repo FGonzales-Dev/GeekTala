@@ -8,6 +8,7 @@ import '../../../core/widgets/avatar_stack.dart';
 import '../../../core/widgets/search_field.dart';
 import '../../../data/models/folder.dart';
 import '../../../data/models/note.dart';
+import '../../../data/models/note_search.dart';
 import '../../../data/providers/folders_providers.dart';
 import '../../../data/providers/notes_providers.dart';
 import '../../../data/providers/search_provider.dart';
@@ -50,9 +51,10 @@ class _MobileNotesListScreenState
     final tags = ref.watch(allTagsProvider).value ?? const [];
     final tagsById = {for (final t in tags) t.id: t};
     final query = ref.watch(searchQueryProvider);
-    final notes = filterNotesByQuery(
+    final notes = searchNotes(
       allNotes.where((n) => _matches(n, folders)).toList(),
       query,
+      tagsById: tagsById,
     );
 
     return Column(
@@ -136,6 +138,7 @@ class _MobileNotesListScreenState
                 MobileNoteCard(
                   note: note,
                   tagsById: tagsById,
+                  searchTerms: highlightTerms(query),
                   onTap: () => context.go('/notes/${note.id}'),
                 ),
             ],

@@ -45,7 +45,7 @@ sealed class Note with _$Note {
 
   /// Every bit of text in [body], recursively — unlike [previewText], this
   /// doesn't stop at the first match or skip headings; it's built for
-  /// substring search (see `filterNotesByQuery`), not display.
+  /// search (see `searchNotes`), not display.
   String get bodyPlainText {
     final buffer = StringBuffer();
 
@@ -74,17 +74,4 @@ sealed class Note with _$Note {
     }
     return buffer.toString();
   }
-}
-
-/// Case-insensitive substring match over both title and full body text.
-List<Note> filterNotesByQuery(List<Note> notes, String query) {
-  final needle = query.trim().toLowerCase();
-  if (needle.isEmpty) return notes;
-  return notes
-      .where(
-        (n) =>
-            n.title.toLowerCase().contains(needle) ||
-            n.bodyPlainText.toLowerCase().contains(needle),
-      )
-      .toList();
 }
