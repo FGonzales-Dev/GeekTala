@@ -1,0 +1,38 @@
+# App icon generation. Regenerate after changing any source in assets/app_icon/:
+#   dart run flutter_launcher_icons
+#   git checkout -- ios/Runner.xcodeproj/project.pbxproj   # tool bug: rewrites an unrelated build setting
+#   for s in 192 512; do sips -s format png -z $s $s assets/app_icon/icon_full_bleed.png \
+#     --out web/icons/Icon-maskable-$s.png; done            # tool has no separate maskable source
+#
+# Sources (1024x1024):
+#   icon.png                     rounded tile with transparent corners (Android legacy, web, Windows)
+#   icon_full_bleed.png          square, no alpha — iOS applies its own mask; also web maskable
+#   icon_android_foreground.png  glyph only at source size; the generated adaptive XML insets it 16%
+#   icon_macos.png               824px tile on a 1024 canvas (macOS Big Sur icon grid)
+flutter_launcher_icons:
+  image_path: "assets/app_icon/icon.png"
+
+  android: "ic_launcher"
+  adaptive_icon_background: "#1A1A18"
+  adaptive_icon_foreground: "assets/app_icon/icon_android_foreground.png"
+  adaptive_icon_monochrome: "assets/app_icon/icon_android_foreground.png"
+
+  ios: true
+  image_path_ios: "assets/app_icon/icon_full_bleed.png"
+  remove_alpha_ios: true
+  background_color_ios: "#1A1A18"
+
+  macos:
+    generate: true
+    image_path: "assets/app_icon/icon_macos.png"
+
+  web:
+    generate: true
+    image_path: "assets/app_icon/icon.png"
+    background_color: "#1A1A18"
+    theme_color: "#1A1A18"
+
+  windows:
+    generate: true
+    image_path: "assets/app_icon/icon.png"
+    icon_size: 256
