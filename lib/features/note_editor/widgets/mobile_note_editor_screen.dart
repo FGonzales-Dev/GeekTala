@@ -7,6 +7,7 @@ import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/sync_status_indicator.dart';
 import '../../../data/providers/notes_providers.dart';
 import '../markdown_io.dart';
+import '../markdown_paste.dart';
 import 'note_editor_body.dart';
 
 /// `.m-editor-topbar` + `.m-editor-scroll` + `.m-toolbar` — pushed
@@ -62,6 +63,20 @@ class MobileNoteEditorScreen extends ConsumerWidget {
                         ),
                         onSelected: (value) async {
                           switch (value) {
+                            case 'paste_markdown':
+                              // The phone's own paste menu bypasses the
+                              // editor's paste handling, so it's here.
+                              final pasted = await ref
+                                      .read(markdownPasteTargetsProvider)[noteId]
+                                      ?.pasteClipboardFormatted() ??
+                                  false;
+                              if (!pasted && context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Nothing to paste'),
+                                  ),
+                                );
+                              }
                             case 'export':
                               await exportNoteAsMarkdown(context, note);
                             case 'trash':
@@ -72,6 +87,10 @@ class MobileNoteEditorScreen extends ConsumerWidget {
                           }
                         },
                         itemBuilder: (context) => const [
+                          PopupMenuItem(
+                            value: 'paste_markdown',
+                            child: Text('Paste Markdown'),
+                          ),
                           PopupMenuItem(
                             value: 'export',
                             child: Text('Export as Markdown…'),

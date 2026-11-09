@@ -7,6 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../data/providers/notes_providers.dart';
+import '../../../data/providers/sync_provider.dart';
+import '../../../data/sync/pending_writes.dart';
+import '../markdown_paste.dart';
 import 'note_tag_picker.dart';
 import 'styled_title_controller.dart';
 
@@ -18,7 +21,15 @@ import 'styled_title_controller.dart';
 /// not a reactive `ref.watch`, which would recreate the [EditorState] (and
 /// reset cursor/selection) on every stream emission, including the ones
 /// caused by this widget's own saves. Changes flow one-way out to Drift
-/// on a debounce; they don't flow back in while the note is open.
+/// on a debounce; they don't flow back in while the note is open — except
+/// after a sync download, which reloads the note from Drift.
+///
+/// Pending debounced saves are registered with [PendingWrites] so upload
+/// and download can write them out first, and are written (not dropped)
+/// when switching to another note.
+///
+/// Pasting Markdown goes through [MarkdownPaste]: formatted or as Markdown
+/// text (Settings), with a bar to swap to the other right after.
 class NoteEditorBody extends ConsumerStatefulWidget {
   const NoteEditorBody({super.key, required this.noteId, this.desktop = true});
 
@@ -68,12 +79,19 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
   FocusNode? _titleFocusNode;
   Timer? _bodyDebounceTimer;
   Timer? _titleDebounceTimer;
+  Future<void> Function()? _pendingBodySave;
+  Future<void> Function()? _pendingTitleSave;
+  late final PendingWrites _pendingWrites;
+  late final MarkdownPasteTargets _pasteTargets;
+  MarkdownPaste? _markdownPaste;
   String? _loadedNoteId;
   _ToolbarTarget _toolbarTarget = _ToolbarTarget.body;
 
   @override
   void initState() {
     super.initState();
+    _pendingWrites = ref.read(pendingWritesProvider)..register(_flushSaves);
+    _pasteTargets = ref.read(markdownPasteTargetsProvider);
     _load();
   }
 
@@ -88,13 +106,15 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
 
   @override
   void dispose() {
+    _pendingWrites.unregister(_flushSaves);
     _teardown();
     super.dispose();
   }
 
   void _teardown() {
-    _bodyDebounceTimer?.cancel();
-    _titleDebounceTimer?.cancel();
+    unawaited(_flushSaves());
+    _disposeMarkdownPaste(_loadedNoteId, _markdownPaste);
+    _markdownPaste = null;
     _titleFocusNode?.dispose();
     _titleController?.dispose();
     _editorScrollController?.dispose();
@@ -107,9 +127,65 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
     _toolbarTarget = _ToolbarTarget.body;
   }
 
-  Future<void> _load() async {
+  void _disposeMarkdownPaste(String? noteId, MarkdownPaste? paste) {
+    if (paste == null) return;
+    if (noteId != null) _pasteTargets.unregister(noteId, paste);
+    paste.dispose();
+  }
+
+  /// Writes any debounced save now instead of waiting for its timer.
+  Future<void> _flushSaves() async {
+    _bodyDebounceTimer?.cancel();
+    _titleDebounceTimer?.cancel();
+    final saves = [?_pendingBodySave, ?_pendingTitleSave];
+    _pendingBodySave = null;
+    _pendingTitleSave = null;
+    await Future.wait([for (final save in saves) save()]);
+  }
+
+  /// After a download the database holds the server's copy of this note;
+  /// reload it rather than keep editing (and later saving) the old one.
+  void _reloadAfterDownload() {
+    if (!mounted || _loadedNoteId == null) return;
+    // The download flushed saves before it started; anything typed during
+    // it loses to the server copy the user chose to download.
+    _bodyDebounceTimer?.cancel();
+    _titleDebounceTimer?.cancel();
+    _pendingBodySave = null;
+    _pendingTitleSave = null;
+    final old = (
+      _titleFocusNode,
+      _titleController,
+      _editorScrollController,
+      _editorState,
+    );
+    _disposeMarkdownPaste(_loadedNoteId, _markdownPaste);
+    setState(() {
+      _markdownPaste = null;
+      _editorState = null;
+      _editorScrollController = null;
+      _titleController = null;
+      _titleFocusNode = null;
+      _loadedNoteId = null;
+      _toolbarTarget = _ToolbarTarget.body;
+    });
+    // Disposed once the old editor widgets are gone from the tree.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      old.$1?.dispose();
+      old.$2?.dispose();
+      old.$3?.dispose();
+      old.$4?.dispose();
+    });
+    _load(fresh: true);
+  }
+
+  /// [fresh] reads straight from Drift: right after a download the cached
+  /// `noteByIdProvider` value may not have caught up yet.
+  Future<void> _load({bool fresh = false}) async {
     final noteId = widget.noteId;
-    final note = await ref.read(noteByIdProvider(noteId).future);
+    final note = fresh
+        ? await ref.read(notesRepositoryProvider).watchNoteById(noteId).first
+        : await ref.read(noteByIdProvider(noteId).future);
     if (!mounted || note == null || widget.noteId != noteId) return;
 
     final editorState = EditorState(document: Document.fromJson(note.body));
@@ -123,6 +199,12 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
     // selection at all — show up immediately instead of only after the
     // first click into the body.
     editorState.selection = Selection.collapsed(Position(path: const [0]));
+    final markdownPaste = MarkdownPaste(
+      editorState,
+      formattedByDefault: () =>
+          ref.read(pasteMarkdownFormattedProvider),
+    );
+    _pasteTargets.register(noteId, markdownPaste);
     editorState.selectionNotifier.addListener(() {
       if (mounted &&
           _titleFocusNode?.hasFocus != true &&
@@ -151,6 +233,7 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
     setState(() {
       _loadedNoteId = noteId;
       _editorState = editorState;
+      _markdownPaste = markdownPaste;
       _editorScrollController = EditorScrollController(
         editorState: editorState,
       );
@@ -160,32 +243,50 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
     });
   }
 
+  // The save closures capture the repository up front so they can still
+  // run from `_teardown` (during dispose, where `ref` is off-limits).
   void _scheduleBodySave(String noteId, EditorState editorState) {
+    final repository = ref.read(notesRepositoryProvider);
+    _pendingBodySave = () =>
+        repository.updateBody(noteId, editorState.document.toJson());
     _bodyDebounceTimer?.cancel();
     _bodyDebounceTimer = Timer(_saveDebounce, () {
-      ref.read(notesRepositoryProvider).updateBody(
-            noteId,
-            editorState.document.toJson(),
-          );
+      final save = _pendingBodySave;
+      _pendingBodySave = null;
+      save?.call();
     });
   }
 
   void _scheduleTitleSave(String noteId, StyledTitleController controller) {
+    final repository = ref.read(notesRepositoryProvider);
+    _pendingTitleSave = () => repository.updateTitle(
+          noteId,
+          controller.text,
+          style: controller.runs,
+        );
     _titleDebounceTimer?.cancel();
     _titleDebounceTimer = Timer(_saveDebounce, () {
-      ref
-          .read(notesRepositoryProvider)
-          .updateTitle(noteId, controller.text, style: controller.runs);
+      final save = _pendingTitleSave;
+      _pendingTitleSave = null;
+      save?.call();
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(
+      syncControllerProvider.select((s) => s.downloadCount),
+      (_, _) => _reloadAfterDownload(),
+    );
+    // Keeps the paste preference loaded for `MarkdownPaste`.
+    ref.watch(pasteMarkdownFormattedProvider);
     final editorState = _editorState;
+    final markdownPaste = _markdownPaste;
     final editorScrollController = _editorScrollController;
     final titleController = _titleController;
     final titleFocusNode = _titleFocusNode;
     if (editorState == null ||
+        markdownPaste == null ||
         editorScrollController == null ||
         titleController == null ||
         titleFocusNode == null ||
@@ -196,13 +297,14 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
     final theme = Theme.of(context);
     final colors = context.nooteColors;
     final titlePadding = widget.desktop
-        ? const EdgeInsets.fromLTRB(40, 30, 40, 0)
+        ? const EdgeInsets.fromLTRB(20, 16, 20, 0)
         : const EdgeInsets.fromLTRB(18, 6, 18, 0);
 
-    final editor = AppFlowyEditor(
+    final editorOnly = AppFlowyEditor(
       key: ValueKey(widget.noteId),
       editorState: editorState,
       editorScrollController: editorScrollController,
+      commandShortcutEvents: markdownPaste.commandShortcutEvents,
       blockComponentBuilders: _blockComponentBuilders(widget.desktop),
       editorStyle: widget.desktop
           ? _desktopStyle(theme, colors)
@@ -239,7 +341,20 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
       // applied to *every block* by appflowy_editor (confirmed by reading
       // page_block_component.dart), not once around the page; putting
       // vertical values there is what caused the huge per-line gaps.
-      footer: SizedBox(height: widget.desktop ? 80 : 40),
+      footer: const SizedBox(height: 40),
+    );
+    // The bar to swap a Markdown paste, floating over the editor's bottom.
+    final editor = Stack(
+      fit: StackFit.expand,
+      children: [
+        editorOnly,
+        Positioned(
+          left: 16,
+          right: 16,
+          bottom: 16,
+          child: Center(child: MarkdownPasteBar(controller: markdownPaste)),
+        ),
+      ],
     );
 
     if (!widget.desktop) {
@@ -296,7 +411,7 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
 
   EditorStyle _desktopStyle(ThemeData theme, NooteColors colors) {
     return EditorStyle.desktop(
-      padding: const EdgeInsets.symmetric(horizontal: 40),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       cursorColor: theme.colorScheme.primary,
       selectionColor: colors.selectionBg,
       textStyleConfiguration: _textStyleConfiguration(theme, colors),

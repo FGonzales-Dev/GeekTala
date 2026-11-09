@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../data/models/note.dart';
 import '../../data/providers/notes_providers.dart';
+import 'markdown_convert.dart';
 
 const _markdownTypeGroup = XTypeGroup(
   label: 'Markdown',
@@ -16,8 +17,8 @@ const _markdownTypeGroup = XTypeGroup(
 );
 
 /// Opens a native file picker for a `.md`/`.markdown`/`.txt` file, parses it
-/// with appflowy_editor's own `markdownToDocument`, and creates a new note
-/// from the result. Shared by the desktop notes-list pane and the mobile
+/// with [noteMarkdownToDocument], and creates a new note from the result.
+/// Shared by the desktop notes-list pane and the mobile
 /// notes tab.
 Future<void> importMarkdownNote(
   BuildContext context,
@@ -30,7 +31,7 @@ Future<void> importMarkdownNote(
   Document document;
   try {
     final content = await file.readAsString();
-    document = markdownToDocument(content);
+    document = noteMarkdownToDocument(content);
   } catch (_) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
