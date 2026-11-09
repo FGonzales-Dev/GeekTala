@@ -19,11 +19,10 @@ class FoldersScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final folders = ref.watch(allFoldersProvider).value ?? const [];
+    final tree = ref.watch(folderTreeProvider);
     final noteCounts = ref.watch(noteCountsByFolderProvider).value ?? const {};
     final selectedFolderId = ref.watch(selectedFolderIdProvider);
     final deletedCount = ref.watch(deletedNotesProvider).value?.length ?? 0;
-    final topLevel = folders.where((f) => f.parentId == null);
 
     return SafeArea(
       child: Column(
@@ -61,10 +60,11 @@ class FoldersScreen extends ConsumerWidget {
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               children: [
-                for (final folder in topLevel)
+                for (final folder in tree.roots)
                   FolderTreeNode(
+                    key: ValueKey(folder.id),
                     folder: folder,
-                    allFolders: folders,
+                    tree: tree,
                     depth: 0,
                     noteCounts: noteCounts,
                     selectedFolderId: selectedFolderId,

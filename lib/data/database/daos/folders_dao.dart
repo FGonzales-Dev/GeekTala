@@ -9,19 +9,21 @@ part 'folders_dao.g.dart';
 class FoldersDao extends DatabaseAccessor<AppDatabase> with _$FoldersDaoMixin {
   FoldersDao(super.db);
 
-  Stream<List<FolderRow>> watchAllFolders() {
-    return (select(
-      foldersTable,
-    )..where((f) => f.isDeleted.equals(false))).watch();
+  SimpleSelectStatement<$FoldersTableTable, FolderRow> _visible() {
+    return select(foldersTable)
+      ..where((f) => f.isDeleted.equals(false))
+      ..orderBy([
+        (f) => OrderingTerm.asc(f.sortOrder),
+        (f) => OrderingTerm.asc(f.name),
+      ]);
   }
 
+  /// In display order: by [FoldersTable.sortOrder] within each parent.
+  Stream<List<FolderRow>> watchAllFolders() => _visible().watch();
+
   /// One-shot (not a stream) — used to walk the parent/child tree when
-  /// computing what a delete will affect.
-  Future<List<FolderRow>> getAllFoldersOnce() {
-    return (select(
-      foldersTable,
-    )..where((f) => f.isDeleted.equals(false))).get();
-  }
+  /// computing what a delete or move will affect.
+  Future<List<FolderRow>> getAllFoldersOnce() => _visible().get();
 
   Future<void> insertFolder(FoldersTableCompanion entry) =>
       into(foldersTable).insert(entry);
@@ -30,6 +32,30 @@ class FoldersDao extends DatabaseAccessor<AppDatabase> with _$FoldersDaoMixin {
     return (update(foldersTable)..where((f) => f.id.equals(id))).write(
       FoldersTableCompanion(
         name: Value(name),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  /// Puts [id] under [parentId] (null = top level) at [sortOrder].
+  Future<void> placeFolder(
+    String id, {
+    required String? parentId,
+    required double sortOrder,
+  }) {
+    return (update(foldersTable)..where((f) => f.id.equals(id))).write(
+      FoldersTableCompanion(
+        parentId: Value(parentId),
+        sortOrder: Value(sortOrder),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  Future<void> setSortOrder(String id, double sortOrder) {
+    return (update(foldersTable)..where((f) => f.id.equals(id))).write(
+      FoldersTableCompanion(
+        sortOrder: Value(sortOrder),
         updatedAt: Value(DateTime.now()),
       ),
     );

@@ -85,6 +85,12 @@ class NotesDao extends DatabaseAccessor<AppDatabase> with _$NotesDaoMixin {
 
   Future<void> insertNote(NotesTableCompanion entry) => into(notesTable).insert(entry);
 
+  Future<List<NoteRow>> getNotesByIds(Iterable<String> ids) {
+    return (select(
+      notesTable,
+    )..where((n) => n.id.isIn(ids.toList()))).get();
+  }
+
   Future<void> updateNote(String id, NotesTableCompanion entry) {
     return (update(notesTable)..where((n) => n.id.equals(id))).write(entry);
   }

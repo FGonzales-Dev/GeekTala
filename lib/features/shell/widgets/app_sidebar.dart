@@ -5,20 +5,30 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_icon.dart';
+import '../../../core/widgets/drag_auto_scroll.dart';
 import '../../../core/widgets/search_field.dart';
 import '../../../core/widgets/sync_status_indicator.dart';
+import '../../../data/models/folder_tree.dart';
 import '../../../data/providers/folders_providers.dart';
 import '../../../data/providers/notes_providers.dart';
 import '../../../data/providers/tags_providers.dart';
+import '../../folders/drag_data.dart';
+import '../../folders/folder_actions.dart';
+import '../../folders/widgets/delete_folder_dialog.dart';
 import '../../folders/widgets/folder_name_dialog.dart';
 import '../../folders/widgets/folder_tree_node.dart';
 import '../../settings/widgets/settings_dialog.dart';
+import '../../tags/tag_actions.dart';
 import '../providers/is_viewing_trash_provider.dart';
 import '../providers/pane_widths_provider.dart';
 import '../providers/selected_folder_provider.dart';
 import '../providers/selected_tag_provider.dart';
 
 /// `.sidebar` — folder tree, tags, footer sync status. Desktop/web only.
+///
+/// Drag and drop: notes from the notes list and folders from the tree can
+/// be dropped on a folder (see `FolderTreeNode`), folders on the "Folders"
+/// heading (to the top of the top level), and either on Recently Deleted.
 class AppSidebar extends ConsumerWidget {
   const AppSidebar({super.key});
 
@@ -30,6 +40,7 @@ class AppSidebar extends ConsumerWidget {
     final selectedTagId = ref.watch(selectedTagIdProvider);
     final viewingTrash = ref.watch(isViewingTrashProvider);
     final folders = ref.watch(allFoldersProvider).value ?? const [];
+    final tree = ref.watch(folderTreeProvider);
     final tags = ref.watch(allTagsProvider).value ?? const [];
     final noteCounts = ref.watch(noteCountsByFolderProvider).value ?? const {};
     final deletedCount = ref.watch(deletedNotesProvider).value?.length ?? 0;
@@ -61,91 +72,135 @@ class AppSidebar extends ConsumerWidget {
           // depth, arbitrary tag count) — scroll that middle section
           // instead of overflowing past the footer.
           Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _SectionLabel('Folders'),
-                      _AddFolderButton(
-                        onPressed: () async {
-                          final name = await showFolderNameDialog(
-                            context,
-                            title: 'New folder',
-                            confirmLabel: 'Create',
+            child: DragAutoScrollRegion(
+              builder: (context, scrollController) => SingleChildScrollView(
+                controller: scrollController,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _TopLevelDropTarget(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _SectionLabel('Folders'),
+                          _AddFolderButton(
+                            onPressed: () async {
+                              final name = await showFolderNameDialog(
+                                context,
+                                title: 'New folder',
+                                confirmLabel: 'Create',
+                              );
+                              if (name != null) {
+                                await ref
+                                    .read(foldersRepositoryProvider)
+                                    .createFolder(name: name);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    for (final folder in tree.roots)
+                      FolderTreeNode(
+                        key: ValueKey(folder.id),
+                        folder: folder,
+                        tree: tree,
+                        dragAndDrop: true,
+                        depth: 0,
+                        noteCounts: noteCounts,
+                        selectedFolderId: selectedFolderId,
+                        onSelect: (id) {
+                          ref.read(selectedFolderIdProvider.notifier).select(id);
+                          ref.read(selectedTagIdProvider.notifier).clear();
+                          ref.read(isViewingTrashProvider.notifier).exit();
+                        },
+                        rowBuilder: (
+                          context, {
+                          required folder,
+                          required depth,
+                          required selected,
+                          required noteCount,
+                          required onTap,
+                        }) {
+                          return _NavItem(
+                            icon: AppIconName.folder,
+                            label: folder.name,
+                            trailing: '$noteCount',
+                            selected: selected,
+                            depth: depth,
+                            onTap: onTap,
                           );
-                          if (name != null) {
-                            await ref
-                                .read(foldersRepositoryProvider)
-                                .createFolder(name: name);
-                          }
                         },
                       ),
-                    ],
-                  ),
-                  for (final folder in folders.where((f) => f.parentId == null))
-                    FolderTreeNode(
-                      folder: folder,
-                      allFolders: folders,
-                      depth: 0,
-                      noteCounts: noteCounts,
-                      selectedFolderId: selectedFolderId,
-                      onSelect: (id) {
-                        ref.read(selectedFolderIdProvider.notifier).select(id);
-                        ref.read(selectedTagIdProvider.notifier).clear();
-                        ref.read(isViewingTrashProvider.notifier).exit();
-                      },
-                      rowBuilder: (
-                        context, {
-                        required folder,
-                        required depth,
-                        required selected,
-                        required noteCount,
-                        required onTap,
-                      }) {
-                        return _NavItem(
-                          icon: AppIconName.folder,
-                          label: folder.name,
-                          trailing: '$noteCount',
-                          selected: selected,
-                          depth: depth,
-                          onTap: onTap,
-                        );
-                      },
-                    ),
-                  _NavItem(
-                    icon: AppIconName.people,
-                    label: 'Shared with me',
-                    trailing: '3',
-                  ),
-                  const SizedBox(height: 6),
-                  _SectionLabel('Tags'),
-                  for (final tag in tags)
                     _NavItem(
-                      icon: AppIconName.tag,
-                      label: tag.name,
-                      selected: tag.id == selectedTagId,
-                      onTap: () {
-                        ref.read(selectedTagIdProvider.notifier).toggle(tag.id);
-                        ref.read(selectedFolderIdProvider.notifier).select(null);
-                        ref.read(isViewingTrashProvider.notifier).exit();
-                      },
+                      icon: AppIconName.people,
+                      label: 'Shared with me',
+                      trailing: '3',
                     ),
-                  const SizedBox(height: 6),
-                  _NavItem(
-                    materialIcon: Icons.delete_outline,
-                    label: 'Recently Deleted',
-                    trailing: deletedCount > 0 ? '$deletedCount' : null,
-                    selected: viewingTrash,
-                    onTap: () {
-                      ref.read(isViewingTrashProvider.notifier).enter();
-                      ref.read(selectedFolderIdProvider.notifier).select(null);
-                      ref.read(selectedTagIdProvider.notifier).clear();
-                    },
-                  ),
-                ],
+                    const SizedBox(height: 6),
+                    _SectionLabel('Tags'),
+                    for (final tag in tags)
+                      // Right-click / long-press: Rename, Delete.
+                      GestureDetector(
+                        onSecondaryTapDown: (details) => showTagActionsMenu(
+                          context,
+                          ref,
+                          tag,
+                          details.globalPosition,
+                        ),
+                        onLongPressStart: (details) => showTagActionsMenu(
+                          context,
+                          ref,
+                          tag,
+                          details.globalPosition,
+                        ),
+                        child: _NavItem(
+                          icon: AppIconName.tag,
+                          label: tag.name,
+                          selected: tag.id == selectedTagId,
+                          onTap: () {
+                            ref.read(selectedTagIdProvider.notifier).toggle(tag.id);
+                            ref.read(selectedFolderIdProvider.notifier).select(null);
+                            ref.read(isViewingTrashProvider.notifier).exit();
+                          },
+                        ),
+                      ),
+                    const SizedBox(height: 6),
+                    DragTarget<NooteDragData>(
+                      onWillAcceptWithDetails: (details) => switch (details.data) {
+                        NotesDragData() => true,
+                        FolderDragData(:final folderId) =>
+                          !FolderTree.isProtected(folderId),
+                      },
+                      onAcceptWithDetails: (details) {
+                        switch (details.data) {
+                          case NotesDragData(:final noteIds):
+                            trashNotes(context, ref, noteIds);
+                          case FolderDragData(:final folderId):
+                            // Same confirmation as the folder's Delete menu.
+                            showDeleteFolderDialog(
+                              context,
+                              ref,
+                              folderId: folderId,
+                              folderName: tree[folderId]?.name ?? 'folder',
+                            );
+                        }
+                      },
+                      builder: (context, candidates, _) => _NavItem(
+                        materialIcon: Icons.delete_outline,
+                        label: 'Recently Deleted',
+                        trailing: deletedCount > 0 ? '$deletedCount' : null,
+                        selected: viewingTrash,
+                        dropHighlight: candidates.isNotEmpty,
+                        onTap: () {
+                          ref.read(isViewingTrashProvider.notifier).enter();
+                          ref.read(selectedFolderIdProvider.notifier).select(null);
+                          ref.read(selectedTagIdProvider.notifier).clear();
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -176,6 +231,51 @@ class AppSidebar extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The "Folders" heading: dropping a folder here puts it first at the top
+/// level.
+class _TopLevelDropTarget extends ConsumerWidget {
+  const _TopLevelDropTarget({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tree = ref.watch(folderTreeProvider);
+
+    bool accepts(NooteDragData data) {
+      if (data is! FolderDragData) return false;
+      final id = data.folderId;
+      final alreadyFirst =
+          tree[id]?.parentId == null && tree.roots.firstOrNull?.id == id;
+      return tree.canMove(id, into: null) && !alreadyFirst;
+    }
+
+    return DragTarget<NooteDragData>(
+      onWillAcceptWithDetails: (details) => accepts(details.data),
+      onAcceptWithDetails: (details) => moveFolderTo(
+        context,
+        ref,
+        (details.data as FolderDragData).folderId,
+        parentId: null,
+        index: 0,
+      ),
+      builder: (context, candidates, _) => Container(
+        foregroundDecoration: candidates.isEmpty
+            ? null
+            : BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: Theme.of(context).colorScheme.primary,
+                    width: 2,
+                  ),
+                ),
+              ),
+        child: child,
       ),
     );
   }
@@ -231,6 +331,7 @@ class _NavItem extends StatelessWidget {
     this.selected = false,
     this.depth = 0,
     this.onTap,
+    this.dropHighlight = false,
   }) : assert(icon != null || materialIcon != null);
 
   final AppIconName? icon;
@@ -243,6 +344,9 @@ class _NavItem extends StatelessWidget {
   final bool selected;
   final int depth;
   final VoidCallback? onTap;
+
+  /// Something droppable is hovering over this row.
+  final bool dropHighlight;
 
   @override
   Widget build(BuildContext context) {
@@ -257,7 +361,14 @@ class _NavItem extends StatelessWidget {
         margin: const EdgeInsets.symmetric(vertical: 1),
         padding: EdgeInsets.fromLTRB(8 + depth * 16, 6, 8, 6),
         decoration: BoxDecoration(
-          color: selected ? colors.activeBg : null,
+          color: dropHighlight
+              ? theme.colorScheme.primary.withValues(alpha: 0.08)
+              : selected
+              ? colors.activeBg
+              : null,
+          border: dropHighlight
+              ? Border.all(color: theme.colorScheme.primary, width: 1.5)
+              : null,
           borderRadius: BorderRadius.circular(6),
         ),
         child: Row(

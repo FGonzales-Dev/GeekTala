@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$Folder {
 
- String get id; String get name; String? get parentId;
+ String get id; String get name; String? get parentId; double get sortOrder;
 /// Create a copy of Folder
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -26,16 +26,16 @@ $FolderCopyWith<Folder> get copyWith => _$FolderCopyWithImpl<Folder>(this as Fol
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Folder&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.parentId, parentId) || other.parentId == parentId));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Folder&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.parentId, parentId) || other.parentId == parentId)&&(identical(other.sortOrder, sortOrder) || other.sortOrder == sortOrder));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,name,parentId);
+int get hashCode => Object.hash(runtimeType,id,name,parentId,sortOrder);
 
 @override
 String toString() {
-  return 'Folder(id: $id, name: $name, parentId: $parentId)';
+  return 'Folder(id: $id, name: $name, parentId: $parentId, sortOrder: $sortOrder)';
 }
 
 
@@ -46,7 +46,7 @@ abstract mixin class $FolderCopyWith<$Res>  {
   factory $FolderCopyWith(Folder value, $Res Function(Folder) _then) = _$FolderCopyWithImpl;
 @useResult
 $Res call({
- String id, String name, String? parentId
+ String id, String name, String? parentId, double sortOrder
 });
 
 
@@ -63,12 +63,13 @@ class _$FolderCopyWithImpl<$Res>
 
 /// Create a copy of Folder
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = null,Object? parentId = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = null,Object? parentId = freezed,Object? sortOrder = null,}) {
   return _then(Folder(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
 as String,parentId: freezed == parentId ? _self.parentId : parentId // ignore: cast_nullable_to_non_nullable
-as String?,
+as String?,sortOrder: null == sortOrder ? _self.sortOrder : sortOrder // ignore: cast_nullable_to_non_nullable
+as double,
   ));
 }
 
@@ -150,10 +151,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String name,  String? parentId)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String name,  String? parentId,  double sortOrder)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Folder() when $default != null:
-return $default(_that.id,_that.name,_that.parentId);case _:
+return $default(_that.id,_that.name,_that.parentId,_that.sortOrder);case _:
   return orElse();
 
 }
@@ -171,10 +172,10 @@ return $default(_that.id,_that.name,_that.parentId);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String name,  String? parentId)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String name,  String? parentId,  double sortOrder)  $default,) {final _that = this;
 switch (_that) {
 case _Folder():
-return $default(_that.id,_that.name,_that.parentId);}
+return $default(_that.id,_that.name,_that.parentId,_that.sortOrder);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -188,10 +189,10 @@ return $default(_that.id,_that.name,_that.parentId);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String name,  String? parentId)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String name,  String? parentId,  double sortOrder)?  $default,) {final _that = this;
 switch (_that) {
 case _Folder() when $default != null:
-return $default(_that.id,_that.name,_that.parentId);case _:
+return $default(_that.id,_that.name,_that.parentId,_that.sortOrder);case _:
   return null;
 
 }
@@ -203,12 +204,13 @@ return $default(_that.id,_that.name,_that.parentId);case _:
 
 
 class _Folder implements Folder {
-  const _Folder({required this.id, required this.name, this.parentId});
+  const _Folder({required this.id, required this.name, this.parentId, this.sortOrder = 0.0});
   
 
 @override final  String id;
 @override final  String name;
 @override final  String? parentId;
+@override@JsonKey() final  double sortOrder;
 
 /// Create a copy of Folder
 /// with the given fields replaced by the non-null parameter values.
@@ -220,16 +222,16 @@ _$FolderCopyWith<_Folder> get copyWith => __$FolderCopyWithImpl<_Folder>(this, _
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Folder&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.parentId, parentId) || other.parentId == parentId));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Folder&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.parentId, parentId) || other.parentId == parentId)&&(identical(other.sortOrder, sortOrder) || other.sortOrder == sortOrder));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,name,parentId);
+int get hashCode => Object.hash(runtimeType,id,name,parentId,sortOrder);
 
 @override
 String toString() {
-  return 'Folder(id: $id, name: $name, parentId: $parentId)';
+  return 'Folder(id: $id, name: $name, parentId: $parentId, sortOrder: $sortOrder)';
 }
 
 
@@ -240,7 +242,7 @@ abstract mixin class _$FolderCopyWith<$Res> implements $FolderCopyWith<$Res> {
   factory _$FolderCopyWith(_Folder value, $Res Function(_Folder) _then) = __$FolderCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String name, String? parentId
+ String id, String name, String? parentId, double sortOrder
 });
 
 
@@ -257,12 +259,13 @@ class __$FolderCopyWithImpl<$Res>
 
 /// Create a copy of Folder
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = null,Object? parentId = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = null,Object? parentId = freezed,Object? sortOrder = null,}) {
   return _then(_Folder(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
 as String,parentId: freezed == parentId ? _self.parentId : parentId // ignore: cast_nullable_to_non_nullable
-as String?,
+as String?,sortOrder: null == sortOrder ? _self.sortOrder : sortOrder // ignore: cast_nullable_to_non_nullable
+as double,
   ));
 }
 

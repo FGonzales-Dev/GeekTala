@@ -19,10 +19,10 @@ class NotesRepository {
 
   final AppDatabase _db;
 
-  /// Stamped onto every locally-created row so it's ready to sync once
-  /// PowerSync connects — the server-side stored procedures (see
-  /// supabase/migrations/) re-stamp it from `auth.uid()` regardless, so a
-  /// stale/empty value here can't leak a row to the wrong owner.
+  /// Stamped onto every locally-created row for reference only — the
+  /// server's `push_changes` (see supabase/migrations/) always uses
+  /// `auth.uid()`, so a stale/empty value here can't leak a row to the
+  /// wrong owner.
   String get _ownerId => Supabase.instance.client.auth.currentUser?.id ?? '';
 
   Stream<List<Note>> watchAllNotes() {
@@ -103,6 +103,59 @@ class NotesRepository {
   }
 
   Future<void> deleteNote(String id) => _db.notesDao.softDeleteNote(id);
+
+  /// Moves [ids] into [folderId]. Returns each moved note's previous
+  /// folder, for [undoMoveNotes]; notes already in [folderId] are skipped.
+  Future<Map<String, String?>> moveNotes(
+    Iterable<String> ids,
+    String folderId,
+  ) {
+    return _db.transaction(() async {
+      final previous = <String, String?>{};
+      for (final row in await _db.notesDao.getNotesByIds(ids)) {
+        if (row.folderId == folderId) continue;
+        previous[row.id] = row.folderId;
+        await _setFolder(row.id, folderId);
+      }
+      return previous;
+    });
+  }
+
+  Future<void> undoMoveNotes(Map<String, String?> previous) {
+    return _db.transaction(() async {
+      for (final MapEntry(key: id, value: folderId) in previous.entries) {
+        await _setFolder(id, folderId);
+      }
+    });
+  }
+
+  // A move counts as an edit: sync keeps whichever copy is newer.
+  Future<void> _setFolder(String id, String? folderId) {
+    return _db.notesDao.updateNote(
+      id,
+      NotesTableCompanion(
+        folderId: Value(folderId),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  /// Moves several notes to Recently Deleted at once.
+  Future<void> deleteNotes(Iterable<String> ids) {
+    return _db.transaction(() async {
+      for (final id in ids) {
+        await _db.notesDao.softDeleteNote(id);
+      }
+    });
+  }
+
+  Future<void> restoreNotes(Iterable<String> ids) {
+    return _db.transaction(() async {
+      for (final id in ids) {
+        await _db.notesDao.restoreNote(id);
+      }
+    });
+  }
 
   Future<void> restoreNote(String id) => _db.notesDao.restoreNote(id);
 

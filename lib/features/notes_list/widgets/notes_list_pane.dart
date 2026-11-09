@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -6,6 +7,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../data/models/note.dart';
+import '../../../data/models/note_search.dart';
 import '../../../data/providers/folders_providers.dart';
 import '../../../data/providers/notes_providers.dart';
 import '../../../data/providers/search_provider.dart';
@@ -14,11 +16,15 @@ import '../../note_editor/markdown_io.dart';
 import '../../shell/providers/pane_widths_provider.dart';
 import '../../shell/providers/selected_folder_provider.dart';
 import '../../shell/providers/selected_tag_provider.dart';
+import '../providers/note_selection_provider.dart';
 import 'note_list_tile.dart';
 
 /// `.notes-list` — desktop/web pane between the sidebar and the editor.
 /// [selectedNoteId] comes from the current route (`/notes/:noteId`) — the
 /// URL is the source of truth for which note is open, not local state.
+///
+/// ⌘-click (Ctrl-click) and Shift-click select several notes, to drag or
+/// move/delete together — see `noteSelectionProvider`.
 class NotesListPane extends ConsumerWidget {
   const NotesListPane({super.key, this.selectedNoteId});
 
@@ -43,9 +49,10 @@ class NotesListPane extends ConsumerWidget {
     final List<Note> notes;
     final String headerLabel;
     if (searching) {
-      notes = filterNotesByQuery(
+      notes = searchNotes(
         ref.watch(allNotesProvider).value ?? const [],
         query,
+        tagsById: tagsById,
       );
       headerLabel = 'Search results';
     } else if (taggedTag != null) {
@@ -59,6 +66,36 @@ class NotesListPane extends ConsumerWidget {
     }
     final showEmptyState = notes.isEmpty && (searching || taggedTag != null);
     final width = ref.watch(notesListWidthProvider);
+
+    // A different list ends the selection.
+    void clearSelection(Object? _, Object? _) =>
+        ref.read(noteSelectionProvider.notifier).clear();
+    ref.listen<String?>(selectedFolderIdProvider, clearSelection);
+    ref.listen<String?>(selectedTagIdProvider, clearSelection);
+    ref.listen<String>(searchQueryProvider, clearSelection);
+
+    final visibleIds = [for (final n in notes) n.id];
+    final selection = ref
+        .watch(noteSelectionProvider)
+        .idsFor(selectedNoteId)
+        .where(visibleIds.contains)
+        .toSet();
+    final selectedNotes = [
+      for (final n in notes)
+        if (selection.contains(n.id)) n,
+    ];
+
+    void onTap(Note note) {
+      final selector = ref.read(noteSelectionProvider.notifier);
+      if (HardwareKeyboard.instance.isShiftPressed) {
+        selector.selectRange(visibleIds, note.id, openNoteId: selectedNoteId);
+      } else if (isToggleSelectPressed()) {
+        selector.toggle(note.id, openNoteId: selectedNoteId);
+      } else {
+        selector.clear();
+        context.go('/notes/${note.id}');
+      }
+    }
 
     return Container(
       width: width,
@@ -112,10 +149,16 @@ class NotesListPane extends ConsumerWidget {
               children: [
                 for (final note in notes)
                   NoteListTile(
+                    key: ValueKey(note.id),
                     note: note,
                     tagsById: tagsById,
-                    selected: note.id == selectedNoteId,
-                    onTap: () => context.go('/notes/${note.id}'),
+                    selected: selection.isEmpty
+                        ? note.id == selectedNoteId
+                        : selection.contains(note.id),
+                    // Dragging a selected note takes the whole selection.
+                    group: selection.contains(note.id) ? selectedNotes : const [],
+                    searchTerms: searching ? highlightTerms(query) : const [],
+                    onTap: () => onTap(note),
                   ),
               ],
             ),

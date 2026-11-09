@@ -7,24 +7,32 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/avatar_stack.dart';
 import '../../../core/widgets/tag_chip.dart';
 import '../../../data/models/note.dart';
+import '../../../data/models/note_search.dart';
 import '../../../data/models/tag.dart';
 import '../../../data/models/title_style_run.dart';
-import '../../../data/providers/notes_providers.dart';
+import '../../../data/providers/folders_providers.dart';
 import '../../../core/utils/relative_time.dart';
+import '../../../core/utils/search_highlight.dart';
+import '../../folders/folder_actions.dart';
+import '../../folders/widgets/move_to_folder_picker.dart';
 
-/// `.m-note-card`. Long-press opens a "Delete" menu — a soft delete, so no
-/// confirmation; it lands in Recently Deleted and can be restored.
+/// `.m-note-card`. Long-press opens "Move to… / Delete". Delete is a soft
+/// delete with Undo, so no confirmation; it lands in Recently Deleted.
 class MobileNoteCard extends ConsumerWidget {
   const MobileNoteCard({
     super.key,
     required this.note,
     this.tagsById = const {},
     required this.onTap,
+    this.searchTerms = const [],
   });
 
   final Note note;
   final Map<String, Tag> tagsById;
   final VoidCallback onTap;
+
+  /// While searching, the words to highlight (see `highlightTerms`).
+  final List<String> searchTerms;
 
   Future<void> _showMenu(
     BuildContext context,
@@ -39,10 +47,25 @@ class MobileNoteCard extends ConsumerWidget {
         position.dx,
         position.dy,
       ),
-      items: const [PopupMenuItem(value: 'delete', child: Text('Delete'))],
+      items: const [
+        PopupMenuItem(value: 'move', child: Text('Move to…')),
+        PopupMenuItem(value: 'delete', child: Text('Delete')),
+      ],
     );
-    if (action == 'delete') {
-      await ref.read(notesRepositoryProvider).deleteNote(note.id);
+    if (!context.mounted) return;
+    switch (action) {
+      case 'move':
+        final target = await showMoveToFolderPicker(
+          context,
+          title: 'Move "${note.title.trim().isEmpty ? 'Untitled' : note.title}"',
+          tree: ref.read(folderTreeProvider),
+          isAllowed: (id) => id != null && id != note.folderId,
+        );
+        if (target?.folderId case final folderId? when context.mounted) {
+          await moveNotesTo(context, ref, [note.id], folderId);
+        }
+      case 'delete':
+        await trashNotes(context, ref, [note.id]);
     }
   }
 
@@ -73,13 +96,16 @@ class MobileNoteCard extends ConsumerWidget {
                   Expanded(
                     child: Text.rich(
                       TextSpan(
-                        children: buildStyledTitleSpans(
-                          note.title,
-                          note.titleStyle,
-                          AppTextStyles.noteTitle.copyWith(
-                            fontSize: 13,
-                            color: theme.colorScheme.onSurface,
+                        children: highlightMatches(
+                          buildStyledTitleSpans(
+                            note.title,
+                            note.titleStyle,
+                            AppTextStyles.noteTitle.copyWith(
+                              fontSize: 13,
+                              color: theme.colorScheme.onSurface,
+                            ),
                           ),
+                          searchTerms,
                         ),
                       ),
                       overflow: TextOverflow.ellipsis,
@@ -95,10 +121,20 @@ class MobileNoteCard extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 3),
-              Text(
-                note.previewText,
-                style: AppTextStyles.notePreview.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+              Text.rich(
+                TextSpan(
+                  children: highlightMatches([
+                    TextSpan(
+                      // While searching: the part of the note that matched.
+                      text: (searchTerms.isEmpty
+                              ? null
+                              : searchSnippet(note.bodyPlainText, searchTerms)) ??
+                          note.previewText,
+                      style: AppTextStyles.notePreview.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ], searchTerms),
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
