@@ -1,0 +1,72 @@
+-- Local change tracking for upload — see lib/data/sync/sync_service.dart.
+--
+-- The triggers below log every insert/update/delete on the four synced
+-- tables into sync_outbox, so no DAO method has to remember to. They live
+-- in this .drift file (not as raw SQL strings in Dart) so drift knows they
+-- write to sync_outbox and re-runs streams watching it, e.g. the
+-- "N changes not uploaded" count.
+--
+-- One outbox row per record: INSERT OR REPLACE removes the older entry
+-- and adds a new one with a higher seq. Upload deletes only the seqs it
+-- sent, so a record edited again mid-upload stays queued.
+
+import 'tables/folders_table.dart';
+import 'tables/notes_table.dart';
+import 'tables/notes_tags_table.dart';
+import 'tables/tags_table.dart';
+
+CREATE TABLE sync_outbox (
+  seq INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  -- Server table name: 'folders' | 'tags' | 'notes' | 'notes_tags'.
+  entity TEXT NOT NULL,
+  record_id TEXT NOT NULL,
+  -- 'upsert' | 'delete'
+  op TEXT NOT NULL,
+  UNIQUE (entity, record_id)
+) AS SyncOutboxEntry;
+
+-- Small key/value store: signed-in user id, last upload/download times.
+CREATE TABLE sync_state (
+  name TEXT NOT NULL PRIMARY KEY,
+  value TEXT NOT NULL
+) AS SyncStateEntry;
+
+CREATE TRIGGER folders_outbox_insert AFTER INSERT ON folders_table BEGIN
+  INSERT OR REPLACE INTO sync_outbox (entity, record_id, op) VALUES ('folders', new.id, 'upsert');
+END;
+CREATE TRIGGER folders_outbox_update AFTER UPDATE ON folders_table BEGIN
+  INSERT OR REPLACE INTO sync_outbox (entity, record_id, op) VALUES ('folders', new.id, 'upsert');
+END;
+CREATE TRIGGER folders_outbox_delete AFTER DELETE ON folders_table BEGIN
+  INSERT OR REPLACE INTO sync_outbox (entity, record_id, op) VALUES ('folders', old.id, 'delete');
+END;
+
+CREATE TRIGGER tags_outbox_insert AFTER INSERT ON tags_table BEGIN
+  INSERT OR REPLACE INTO sync_outbox (entity, record_id, op) VALUES ('tags', new.id, 'upsert');
+END;
+CREATE TRIGGER tags_outbox_update AFTER UPDATE ON tags_table BEGIN
+  INSERT OR REPLACE INTO sync_outbox (entity, record_id, op) VALUES ('tags', new.id, 'upsert');
+END;
+CREATE TRIGGER tags_outbox_delete AFTER DELETE ON tags_table BEGIN
+  INSERT OR REPLACE INTO sync_outbox (entity, record_id, op) VALUES ('tags', old.id, 'delete');
+END;
+
+CREATE TRIGGER notes_outbox_insert AFTER INSERT ON notes_table BEGIN
+  INSERT OR REPLACE INTO sync_outbox (entity, record_id, op) VALUES ('notes', new.id, 'upsert');
+END;
+CREATE TRIGGER notes_outbox_update AFTER UPDATE ON notes_table BEGIN
+  INSERT OR REPLACE INTO sync_outbox (entity, record_id, op) VALUES ('notes', new.id, 'upsert');
+END;
+CREATE TRIGGER notes_outbox_delete AFTER DELETE ON notes_table BEGIN
+  INSERT OR REPLACE INTO sync_outbox (entity, record_id, op) VALUES ('notes', old.id, 'delete');
+END;
+
+CREATE TRIGGER notes_tags_outbox_insert AFTER INSERT ON notes_tags_table BEGIN
+  INSERT OR REPLACE INTO sync_outbox (entity, record_id, op) VALUES ('notes_tags', new.id, 'upsert');
+END;
+CREATE TRIGGER notes_tags_outbox_update AFTER UPDATE ON notes_tags_table BEGIN
+  INSERT OR REPLACE INTO sync_outbox (entity, record_id, op) VALUES ('notes_tags', new.id, 'upsert');
+END;
+CREATE TRIGGER notes_tags_outbox_delete AFTER DELETE ON notes_tags_table BEGIN
+  INSERT OR REPLACE INTO sync_outbox (entity, record_id, op) VALUES ('notes_tags', old.id, 'delete');
+END;

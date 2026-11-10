@@ -13,8 +13,8 @@ class NooteApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(appThemeModeProvider);
-    // Keeps syncCoordinatorProvider's ref.listen (connect/disconnect
-    // PowerSync as auth state changes) alive for the app's lifetime.
+    // Keeps syncCoordinatorProvider's ref.listen (tells sync which account
+    // is signed in) alive for the app's lifetime.
     ref.watch(syncCoordinatorProvider);
 
     return MaterialApp.router(

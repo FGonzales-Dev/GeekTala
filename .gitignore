@@ -74,7 +74,7 @@ supabase/.temp/
 supabase/.env
 supabase/.env.*
 
-# PowerSync local dev overrides
-powersync/.env
-powersync/.env.*
-powersync/config/*.local.yaml
+
+# Per-environment --dart-define-from-file configs (copy config/prod.example.json)
+config/*.json
+!config/*.example.json

@@ -7,17 +7,16 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/relative_time.dart';
 
-/// `.sync-status` — a colored dot plus a short status string, driven by
-/// real PowerSync state (`syncStatusProvider`) — see
-/// `sync_coordinator_native.dart`/`sync_connector.dart`.
+/// `.sync-status` — a colored dot plus a short status string: what's
+/// waiting to upload, or when this device last synced (`syncStatusProvider`,
+/// see lib/data/sync/sync_service.dart).
 class SyncStatusIndicator extends ConsumerWidget {
   const SyncStatusIndicator({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.nooteColors;
-    final status =
-        ref.watch(syncStatusProvider).value ?? AppSyncStatus.disconnected;
+    final status = ref.watch(syncStatusProvider);
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -43,15 +42,20 @@ class SyncStatusIndicator extends ConsumerWidget {
   }
 
   Color _dotColor(AppSyncStatus status, NooteColors colors) {
+    if (status.busy) return colors.avatar2;
     if (status.hasError) return Colors.red;
-    if (status.uploading || status.downloading) return colors.avatar2;
+    if (status.pendingChanges > 0) return Colors.amber.shade700;
     return colors.avatar1;
   }
 
   String _label(AppSyncStatus status) {
-    if (status.hasError) return 'Sync error';
-    if (!status.connected) return 'Offline';
-    if (status.uploading || status.downloading) return 'Syncing…';
+    if (status.uploading) return 'Uploading…';
+    if (status.downloading) return 'Downloading…';
+    if (status.hasError) return 'Sync failed';
+    final pending = status.pendingChanges;
+    if (pending > 0) {
+      return '$pending ${pending == 1 ? 'change' : 'changes'} not uploaded';
+    }
     final lastSyncedAt = status.lastSyncedAt;
     if (lastSyncedAt == null) return 'Not synced yet';
     return 'Synced ${formatRelativeTime(lastSyncedAt, DateTime.now())}';
