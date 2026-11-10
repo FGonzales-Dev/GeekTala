@@ -245,6 +245,7 @@ Each procedure re-checks the caller's permission (via `folder_shares`/`note_shar
 - Use AppFlowy Editor's built-in markdown import/export (JSON ⇄ Markdown).
 - Add `markdown_converter.dart` service wrapping this.
 - Features: "Import .md file" (notes list), "Export as Markdown" (note editor menu).
+- **Import Folder…** (built 2026-11-09, desktop/mobile — not web): the notes list's import menu picks a folder and recreates it as a Noote folder with its subfolders; every `.md`/`.markdown`/`.txt` file becomes a note (title = file name, date = file modified time), in one transaction (`lib/features/note_editor/folder_import/`). Used to bring in an Apple Notes export (converted to Markdown outside the app via the Notes scripting dictionary — attachments aren't carried over).
 - **Must verify round-trip fidelity** (JSON → Markdown → JSON) for tables and code blocks specifically before relying on it — markdown table syntax is more limited than the rich table node.
 - **Pasting Markdown (built 2026-11-09):** ⌘V/Ctrl+V with text that looks like Markdown (`looksLikeMarkdown` in `markdown_convert.dart`) pastes it formatted, or as the raw text per Settings → "When pasting Markdown"; a bar over the editor then offers the other version until the next edit (swap = restore the pre-paste note and paste again). Other text pastes as before; ⌘⇧V still pastes raw. Mobile: "Paste Markdown" in the editor's ••• menu (the phone's paste menu bypasses the editor's paste shortcut). appflowy_editor's converter drops fenced code blocks, so `noteMarkdownToDocument` adds a parser for them (code-styled paragraph, until real code blocks exist) — used by import too.
 - Not built yet: a whole-note Markdown source view (risk: Markdown can't hold text colors/highlights).
@@ -259,6 +260,14 @@ Each procedure re-checks the caller's permission (via `folder_shares`/`note_shar
 ### Tags & settings (built 2026-11-09)
 - Tags: right-click/long-press a tag in the sidebar, or in a note's tag picker (the way in on mobile) → Rename / Delete. Delete removes the tag from its notes (they stay) and offers Undo. Tag ids are derived from the name (uuid v5) so the same new tag on two devices merges; a new tag reusing a renamed tag's old name gets a random id instead.
 - Device settings (theme, pane widths, paste-Markdown, auto sync) are remembered per device in the local `sync_state` key/value table (`deviceSettingsProvider`), never uploaded.
+
+### Attachments — images (built 2026-11-10)
+- A note refers to an image as an image block with `url: attachment://<uuid>.<ext>` (`lib/data/attachments/`). The file lives in the app's private data folder (`attachments/`) and in the private Supabase Storage bucket `attachments` under `<user id>/<id>` (migration `20261110090000_attachments.sql`: owner-only read/write, 50 MB, images only). A local `attachments_table` (schema v3) tracks which files still need uploading; it isn't synced — other devices learn about a file from the note and download it when it's first shown.
+- Upload sends new files before any note changes and stops if one fails, so a note never reaches the server pointing at a missing file. Photos over 2,560 px are scaled down (EXIF orientation applied); pasted BMPs (Windows) become PNG.
+- Adding: toolbar image button (desktop), the mobile toolbar's image icon, dragging image files into a note (desktop, `desktop_drop`), ⌘V of copied images or image files (`pasteboard`; text on the clipboard wins).
+- `AttachmentImageBlockComponentBuilder` replaces appflowy's image block so `attachment://` images resolve to the device copy, downloading if needed (placeholder + "Try again" when offline).
+- Unused files are removed from the device once per app run (`collectGarbage`, after a 10-minute grace period). Not built yet: other file types (PDFs, recordings), removing server copies of unused files, images in Export as Markdown, web support.
+- Import Folder… brings in images linked by relative path (`![](_attachments/x.png)`) and skips folders that hold only such files. The Apple Notes export (outside the app) saves attachments through Notes' scripting; tables are attachments in Notes' model but already in the note text.
 
 ### Photo attachments
 - Saved to local storage immediately on attach (offline-first, usable right away) — filesystem on native platforms, browser storage (IndexedDB/OPFS) on Web.
