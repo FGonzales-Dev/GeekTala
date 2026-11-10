@@ -15,15 +15,20 @@ const _uuid = Uuid();
 /// there's no `note_shares`/`folder_shares` backing it yet (Build Order
 /// step 7 in noote-plan.md).
 class NotesRepository {
-  NotesRepository(this._db);
+  NotesRepository(this._db, {String Function()? ownerId})
+    : _ownerIdOf = ownerId ?? _signedInUserId;
 
   final AppDatabase _db;
+  final String Function() _ownerIdOf;
+
+  static String _signedInUserId() =>
+      Supabase.instance.client.auth.currentUser?.id ?? '';
 
   /// Stamped onto every locally-created row for reference only — the
   /// server's `push_changes` (see supabase/migrations/) always uses
   /// `auth.uid()`, so a stale/empty value here can't leak a row to the
   /// wrong owner.
-  String get _ownerId => Supabase.instance.client.auth.currentUser?.id ?? '';
+  String get _ownerId => _ownerIdOf();
 
   Stream<List<Note>> watchAllNotes() {
     return _db.notesDao.watchAllNotes().map(
@@ -56,13 +61,15 @@ class NotesRepository {
   Stream<Map<String, int>> watchNoteCountsByFolder() =>
       _db.notesDao.watchNoteCountsByFolder();
 
+  /// [modifiedAt] is for imports that keep a note's original date.
   Future<String> createNote({
     String? folderId,
     String title = '',
     Map<String, dynamic>? body,
+    DateTime? modifiedAt,
   }) async {
     final id = _uuid.v4();
-    final now = DateTime.now();
+    final now = modifiedAt ?? DateTime.now();
     await _db.notesDao.insertNote(
       NotesTableCompanion.insert(
         id: id,

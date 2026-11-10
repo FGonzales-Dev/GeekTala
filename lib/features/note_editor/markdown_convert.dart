@@ -4,12 +4,18 @@ import 'package:markdown/markdown.dart' as md;
 /// Markdown → editor document, for pasting and importing Markdown.
 ///
 /// appflowy_editor's own `markdownToDocument`, plus fenced code blocks,
-/// which it silently drops (it has no parser for them).
+/// which it silently drops (it has no parser for them). Empty Markdown
+/// gives one empty line, like a new note (the editor needs a block to put
+/// the cursor in).
 Document noteMarkdownToDocument(String markdown) {
-  return markdownToDocument(
+  final document = markdownToDocument(
     markdown,
     markdownParsers: const [_CodeBlockParser()],
   );
+  if (document.root.children.isEmpty) {
+    return Document.blank(withInitialText: true);
+  }
+  return document;
 }
 
 /// ```` ``` ```` / `~~~` blocks → one paragraph in inline `code` style.

@@ -37,11 +37,16 @@ class FolderMoveUndo {
 }
 
 class FoldersRepository {
-  FoldersRepository(this._db);
+  FoldersRepository(this._db, {String Function()? ownerId})
+    : _ownerIdOf = ownerId ?? _signedInUserId;
 
   final AppDatabase _db;
+  final String Function() _ownerIdOf;
 
-  String get _ownerId => Supabase.instance.client.auth.currentUser?.id ?? '';
+  static String _signedInUserId() =>
+      Supabase.instance.client.auth.currentUser?.id ?? '';
+
+  String get _ownerId => _ownerIdOf();
 
   bool isProtected(String id) => FolderTree.isProtected(id);
 

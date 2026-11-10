@@ -8,8 +8,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/models/note.dart';
+import '../../data/attachments/attachment_store.dart';
+import '../../data/providers/attachments_provider.dart';
+import '../../data/providers/database_provider.dart';
+import '../../data/providers/folders_providers.dart';
 import '../../data/providers/notes_providers.dart';
+import '../shell/providers/is_viewing_trash_provider.dart';
+import '../shell/providers/selected_folder_provider.dart';
+import '../shell/providers/selected_tag_provider.dart';
+import 'folder_import/folder_import.dart';
 import 'markdown_convert.dart';
+
+export 'folder_import/folder_import.dart' show canImportFolders;
 
 const _markdownTypeGroup = XTypeGroup(
   label: 'Markdown',
@@ -48,6 +58,71 @@ Future<void> importMarkdownNote(
         body: document.toJson(),
       );
   if (context.mounted) context.go('/notes/$id');
+}
+
+/// Picks a folder and imports every Markdown file in it, keeping its
+/// subfolders (see [importMarkdownDirectory]) — e.g. an export from Apple
+/// Notes or Obsidian. Opens the new folder when done.
+Future<void> importMarkdownFolder(BuildContext context, WidgetRef ref) async {
+  final path = await getDirectoryPath(confirmButtonText: 'Import');
+  if (path == null || !context.mounted) return;
+  final messenger = ScaffoldMessenger.of(context);
+  final navigator = Navigator.of(context, rootNavigator: true);
+
+  showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const AlertDialog(
+      content: Row(
+        children: [
+          SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: 16),
+          Text('Importing notes…'),
+        ],
+      ),
+    ),
+  );
+
+  FolderImportResult? result;
+  Object? error;
+  try {
+    result = await importMarkdownDirectory(
+      path,
+      db: ref.read(appDatabaseProvider),
+      folders: ref.read(foldersRepositoryProvider),
+      notes: ref.read(notesRepositoryProvider),
+      attachments: attachmentsSupported
+          ? ref.read(attachmentStoreProvider)
+          : null,
+    );
+  } catch (e) {
+    error = e;
+  }
+  navigator.pop();
+
+  if (result == null) {
+    messenger.showSnackBar(
+      SnackBar(content: Text('Couldn\'t import that folder ($error).')),
+    );
+    return;
+  }
+  ref.read(selectedFolderIdProvider.notifier).select(result.rootFolderId);
+  ref.read(selectedTagIdProvider.notifier).clear();
+  ref.read(isViewingTrashProvider.notifier).exit();
+  final n = result.notes;
+  final failed = result.failedFiles.length;
+  messenger.showSnackBar(
+    SnackBar(
+      content: Text(
+        'Imported $n ${n == 1 ? 'note' : 'notes'} into "${result.folderName}"'
+        '${failed == 0 ? '' : '; $failed ${failed == 1 ? 'file' : 'files'} couldn\'t be read'}.',
+      ),
+    ),
+  );
 }
 
 /// Converts the note's already-persisted body to markdown (via

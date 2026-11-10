@@ -177,20 +177,28 @@ class _ImportMarkdownButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.nooteColors;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadius.small),
-        onTap: () => importMarkdownNote(context, ref, folderId: folderId),
-        child: SizedBox(
-          width: 22,
-          height: 22,
-          child: Center(
-            child: Icon(
-              Icons.file_upload_outlined,
-              size: 14,
-              color: colors.textFaint,
-            ),
+    // A file into the current folder, or a whole folder of them.
+    return PopupMenuButton<String>(
+      tooltip: 'Import Markdown',
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 200),
+      onSelected: (value) => switch (value) {
+        'folder' => importMarkdownFolder(context, ref),
+        _ => importMarkdownNote(context, ref, folderId: folderId),
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem(value: 'file', child: Text('Import Markdown File…')),
+        if (canImportFolders)
+          const PopupMenuItem(value: 'folder', child: Text('Import Folder…')),
+      ],
+      child: SizedBox(
+        width: 22,
+        height: 22,
+        child: Center(
+          child: Icon(
+            Icons.file_upload_outlined,
+            size: 14,
+            color: colors.textFaint,
           ),
         ),
       ),
