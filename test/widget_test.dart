@@ -10,7 +10,6 @@ import 'package:noote/data/database/app_database.dart';
 import 'package:noote/data/providers/database_provider.dart';
 import 'package:noote/data/providers/sync_provider.dart';
 import 'package:noote/data/sync/app_sync_status.dart';
-import 'package:noote/features/shell/adaptive_shell_screen.dart';
 
 void main() {
   testWidgets('renders the notes list on a desktop-sized surface', (
@@ -32,13 +31,10 @@ void main() {
         ProviderScope(
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
-            // Both touch PowerSync/Supabase (path_provider platform
-            // channels, real auth network calls) — neither is available
-            // under flutter test, and neither matters for what this test
-            // actually checks (local note rendering).
-            syncStatusProvider.overrideWith(
-              (ref) => Stream.value(AppSyncStatus.disconnected),
-            ),
+            // Both touch Supabase (real auth/network calls), which isn't
+            // available under flutter test and doesn't matter for what this
+            // test checks (local note rendering).
+            syncStatusProvider.overrideWithValue(AppSyncStatus.idle),
             syncCoordinatorProvider.overrideWith((ref) {}),
             // The real router gates everything behind a signed-in
             // Supabase session (see app_router.dart), which needs a real
@@ -46,23 +42,7 @@ void main() {
             // test is about local note rendering, not auth, so it bypasses
             // the gate with a router that has no redirect at all.
             goRouterProvider.overrideWithValue(
-              GoRouter(
-                initialLocation: '/',
-                routes: [
-                  GoRoute(
-                    path: '/',
-                    builder: (context, state) =>
-                        const AdaptiveShellScreen(currentPath: '/'),
-                  ),
-                  GoRoute(
-                    path: '/notes/:noteId',
-                    builder: (context, state) => AdaptiveShellScreen(
-                      currentPath: '/',
-                      noteId: state.pathParameters['noteId'],
-                    ),
-                  ),
-                ],
-              ),
+              GoRouter(initialLocation: '/', routes: appRoutes),
             ),
           ],
           child: const NooteApp(),

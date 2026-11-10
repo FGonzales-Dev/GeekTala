@@ -57,6 +57,11 @@ class _NewNoteFab extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 64),
       child: FloatingActionButton(
+        // No hero flight: the note screen has no matching button, and the
+        // tabs share one page, so while the button animates back in on the
+        // Notes tab two copies briefly exist — which breaks hero animations
+        // if a note opens in that moment.
+        heroTag: null,
         onPressed: () async {
           final id = await ref.read(notesRepositoryProvider).createNote();
           if (context.mounted) context.go('/notes/$id');

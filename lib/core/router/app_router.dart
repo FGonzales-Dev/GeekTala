@@ -1,11 +1,12 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../features/auth/auth_screen.dart';
+import '../utils/breakpoints.dart';
 import '../../features/shell/adaptive_shell_screen.dart';
 import '../../features/trash/trash_screen.dart';
 
@@ -45,40 +46,60 @@ GoRouter _buildRouter() => GoRouter(
     if (signedIn && goingToSignIn) return '/';
     return null;
   },
-  routes: [
-    GoRoute(
-      path: '/sign-in',
-      builder: (context, state) => const AuthScreen(),
-    ),
-    GoRoute(
-      path: '/trash',
-      builder: (context, state) => const TrashScreen(),
-    ),
-    GoRoute(
-      path: '/',
-      builder: (context, state) => const AdaptiveShellScreen(currentPath: '/'),
-    ),
-    GoRoute(
-      path: '/notes/:noteId',
-      builder: (context, state) => AdaptiveShellScreen(
+  routes: appRoutes,
+);
+
+/// Every route, without the sign-in redirect — widget tests build a router
+/// from these directly.
+final List<RouteBase> appRoutes = [
+  GoRoute(path: '/sign-in', builder: (context, state) => const AuthScreen()),
+  GoRoute(path: '/trash', builder: (context, state) => const TrashScreen()),
+  GoRoute(
+    path: '/',
+    pageBuilder: (context, state) =>
+        _mainPage(context, state, const AdaptiveShellScreen(currentPath: '/')),
+  ),
+  GoRoute(
+    path: '/notes/:noteId',
+    pageBuilder: (context, state) => _mainPage(
+      context,
+      state,
+      AdaptiveShellScreen(
         currentPath: '/',
         noteId: state.pathParameters['noteId'],
       ),
+      fullScreenOnMobile: true,
     ),
+  ),
+  for (final tab in const ['/folders', '/shared', '/settings'])
     GoRoute(
-      path: '/folders',
-      builder: (context, state) =>
-          const AdaptiveShellScreen(currentPath: '/folders'),
+      path: tab,
+      pageBuilder: (context, state) =>
+          _mainPage(context, state, AdaptiveShellScreen(currentPath: tab)),
     ),
-    GoRoute(
-      path: '/shared',
-      builder: (context, state) =>
-          const AdaptiveShellScreen(currentPath: '/shared'),
-    ),
-    GoRoute(
-      path: '/settings',
-      builder: (context, state) =>
-          const AdaptiveShellScreen(currentPath: '/settings'),
-    ),
-  ],
-);
+];
+
+/// The page for one of the main screen's routes.
+///
+/// These routes are one screen shown different ways, so they share a page:
+/// same key and type means the Navigator updates the existing page in place
+/// when the route changes, rather than sliding in a fresh copy of the whole
+/// window (which also threw away scroll positions and selection).
+/// - Desktop: all of them are the same window (sidebar, list, editor).
+/// - Mobile: the bottom-nav tabs share one page (so the tabs' IndexedStack
+///   keeps their state); a note opens full screen on its own page, with the
+///   usual slide.
+Page<void> _mainPage(
+  BuildContext context,
+  GoRouterState state,
+  Widget child, {
+  bool fullScreenOnMobile = false,
+}) {
+  if (isDesktop(context)) {
+    return NoTransitionPage(key: const ValueKey('main-window'), child: child);
+  }
+  if (!fullScreenOnMobile) {
+    return NoTransitionPage(key: const ValueKey('mobile-tabs'), child: child);
+  }
+  return MaterialPage(key: state.pageKey, name: state.name, child: child);
+}

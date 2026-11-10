@@ -14,7 +14,6 @@ import 'package:noote/data/database/app_database.dart';
 import 'package:noote/data/providers/database_provider.dart';
 import 'package:noote/data/providers/sync_provider.dart';
 import 'package:noote/data/sync/app_sync_status.dart';
-import 'package:noote/features/shell/adaptive_shell_screen.dart';
 
 /// Pasting Markdown in the real desktop editor (see widget_test.dart for
 /// why everything runs inside `runAsync`).
@@ -57,15 +56,7 @@ void main() {
             goRouterProvider.overrideWithValue(
               GoRouter(
                 initialLocation: '/notes/grocery-list',
-                routes: [
-                  GoRoute(
-                    path: '/notes/:noteId',
-                    builder: (context, state) => AdaptiveShellScreen(
-                      currentPath: '/',
-                      noteId: state.pathParameters['noteId'],
-                    ),
-                  ),
-                ],
+                routes: appRoutes,
               ),
             ),
           ],
