@@ -258,7 +258,9 @@ void main() {
           'shared': 2,
         },
       );
-      // The new order is queued for upload.
+      // Later upgrades ran too (version 3: attachments).
+    expect(await db.attachmentsDao.all(), isEmpty);
+    // The new order is queued for upload.
       expect(
         (await queued()).map((e) => e.$2),
         unorderedEquals([

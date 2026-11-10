@@ -2,9 +2,12 @@ import 'package:drift/drift.dart';
 
 import '../models/title_style_run.dart';
 import 'connection/connection.dart' as connection;
+import 'daos/attachments_dao.dart';
 import 'daos/folders_dao.dart';
 import 'daos/notes_dao.dart';
+import 'daos/sync_dao.dart';
 import 'daos/tags_dao.dart';
+import 'tables/attachments_table.dart';
 import 'tables/folders_table.dart';
 import 'tables/notes_table.dart';
 import 'tables/notes_tags_table.dart';
@@ -13,61 +16,68 @@ import 'tables/tags_table.dart';
 part 'app_database.g.dart';
 
 @DriftDatabase(
-  tables: [NotesTable, FoldersTable, TagsTable, NotesTagsTable],
-  daos: [NotesDao, FoldersDao, TagsDao],
+  tables: [
+    NotesTable,
+    FoldersTable,
+    TagsTable,
+    NotesTagsTable,
+    AttachmentsTable,
+  ],
+  daos: [NotesDao, FoldersDao, TagsDao, SyncDao, AttachmentsDao],
+  include: {'sync.drift'},
 )
 class AppDatabase extends _$AppDatabase {
-  // connection.connect() returns a DatabaseConnection (SqliteAsyncDriftConnection
-  // wrapping PowerSync — see connection_native.dart), not a bare
-  // QueryExecutor. Passing it here still does the right thing: drift's
-  // DatabaseConnectionUser constructor detects when the executor it's
-  // given already *is* a DatabaseConnection and reuses its streamQueries
-  // as-is rather than creating a separate one — required for Drift's
-  // watch() streams to see updates PowerSync pulls down from sync, since
-  // those arrive through that same connection, not through Drift's own
-  // write path.
-  AppDatabase() : _isPowerSyncManaged = true, super(connection.connect());
+  AppDatabase() : super(connection.connect());
 
   /// For widget/unit tests — avoids `connection.connect()`'s
-  /// `path_provider`/PowerSync/`WasmDatabase` platform-channel calls, which
-  /// aren't available under `flutter test`. Pass `NativeDatabase.memory()`.
-  /// Unlike the real constructor, this isn't PowerSync-managed — there's no
-  /// separate process creating the tables, so `onCreate` below has to.
-  AppDatabase.forTesting(super.executor) : _isPowerSyncManaged = false;
+  /// `path_provider`/`WasmDatabase` platform-channel calls, which aren't
+  /// available under `flutter test`. Pass `NativeDatabase.memory()`.
+  AppDatabase.forTesting(super.executor);
 
-  final bool _isPowerSyncManaged;
-
-  // PowerSync ISO-8601-encodes timestamps when syncing from Postgres —
-  // this must match, or every DateTimeColumn read after a sync silently
-  // corrupts (Drift's default is integer-epoch storage). See
-  // lib/data/sync/powersync_schema.dart's doc comment.
+  // ISO-8601 text rather than drift's default epoch integers: readable in
+  // a SQLite browser and the same shape Postgres timestamps arrive in.
   @override
   DriftDatabaseOptions get options =>
       const DriftDatabaseOptions(storeDateTimeAsText: true);
 
-  // schemaVersion/MigrationStrategy no longer own table creation for
-  // notes/folders/tags/notesTags — those are PowerSync-managed views now
-  // (see connection_native.dart), created and auto-migrated by PowerSync
-  // itself from lib/data/sync/powersync_schema.dart. Calling m.createAll()
-  // or m.addColumn() against them here would collide with views that
-  // already exist by the time this runs (PowerSync initializes before
-  // Drift's first query) — schema changes to those four tables go through
-  // powersync_schema.dart, not this file, from here on. This still fires
-  // exactly once per fresh local database file (Drift's own PRAGMA
-  // user_version bookkeeping, independent of PowerSync's), which is all
-  // that's needed to seed first-launch content.
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) async {
-          if (!_isPowerSyncManaged) {
-            await m.createAll();
+          // Creates the tables, sync_outbox/sync_state and the outbox
+          // triggers (sync.drift) — triggers first, so the seed below is
+          // queued for upload like any other local change.
+          await m.createAll();
+          await seedDemoContent();
+        },
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            // Folder order, for drag-to-reorder. Existing folders keep the
+            // order they were shown in (creation order within each parent).
+            // The update goes through the outbox triggers, so the new
+            // order is uploaded with the next sync.
+            await m.addColumn(foldersTable, foldersTable.sortOrder);
+            await customStatement(
+              'UPDATE folders_table SET sort_order = ('
+              'SELECT COUNT(*) FROM folders_table AS earlier '
+              'WHERE earlier.parent_id IS folders_table.parent_id '
+              'AND earlier.rowid < folders_table.rowid)',
+            );
           }
-          await _seed(this);
+          if (from < 3) {
+            // Attachments (images in notes).
+            await m.createTable(attachmentsTable);
+          }
         },
       );
+
+  /// First-launch content. Also used by `SyncService` when an account with
+  /// nothing on the server signs in on a device that held another
+  /// account's notes. Rows that already exist (e.g. the Personal/Shared
+  /// folders) are left as they are.
+  Future<void> seedDemoContent() => _seed(this);
 }
 
 // ---- appflowy_editor document JSON builders (seed data only) ----
@@ -169,41 +179,51 @@ Future<void> _seed(AppDatabase db) async {
   final now = DateTime(2026, 8, 19, 14, 30);
 
   await db.batch((batch) {
-    batch.insertAll(db.foldersTable, [
-      FoldersTableCompanion.insert(id: 'work', name: 'Work', updatedAt: now),
+    const ignore = InsertMode.insertOrIgnore;
+    batch.insertAll(db.foldersTable, mode: ignore, [
+      FoldersTableCompanion.insert(
+        id: 'work',
+        name: 'Work',
+        updatedAt: now,
+        sortOrder: const Value(0),
+      ),
       FoldersTableCompanion.insert(
         id: 'engineering',
         name: 'Engineering',
         parentId: const Value('work'),
         updatedAt: now,
+        sortOrder: const Value(0),
       ),
       FoldersTableCompanion.insert(
         id: 'product-specs',
         name: 'Product Specs',
         parentId: const Value('work'),
         updatedAt: now,
+        sortOrder: const Value(1),
       ),
       FoldersTableCompanion.insert(
         id: 'personal',
         name: 'Personal',
         updatedAt: now,
+        sortOrder: const Value(1),
       ),
-      // 'personal' and 'shared' are permanent — FoldersRepository.
-      // protectedFolderIds refuses to delete either.
+      // 'personal' and 'shared' are permanent — see protectedFolderIds
+      // (models/folder.dart).
       FoldersTableCompanion.insert(
         id: 'shared',
         name: 'Shared',
         updatedAt: now,
+        sortOrder: const Value(2),
       ),
     ]);
 
-    batch.insertAll(db.tagsTable, [
+    batch.insertAll(db.tagsTable, mode: ignore, [
       TagsTableCompanion.insert(id: 'ideas', name: 'ideas'),
       TagsTableCompanion.insert(id: 'recipes', name: 'recipes'),
       TagsTableCompanion.insert(id: 'architecture', name: 'architecture'),
     ]);
 
-    batch.insertAll(db.notesTable, [
+    batch.insertAll(db.notesTable, mode: ignore, [
       NotesTableCompanion.insert(
         id: 'sync-architecture',
         folderId: const Value('engineering'),
@@ -213,24 +233,24 @@ Future<void> _seed(AppDatabase db) async {
             _heading('Overview'),
             _paragraph(
               'Every write hits the local SQLite database first — the UI '
-              'never waits on a network call. PowerSync then pushes changes '
-              'to Postgres once the device is back online, and pulls down '
-              'changes made elsewhere.',
+              'never waits on a network call. Every change is queued in a '
+              'local outbox; Upload sends the queue to Supabase, and Download '
+              'replaces the local copy with what is on the server.',
             ),
             ..._bulletList([
               'Drift for local storage (SQLite)',
-              'PowerSync for offline-first sync',
+              'A local outbox of changes for upload',
               'Supabase for backend, auth, and storage',
             ]),
             _codeParagraph(
               'final note = await notesRepository.watchNote(noteId);\n'
-              'final status = syncStatusProvider.value;',
+              'await ref.read(syncControllerProvider.notifier).upload();',
             ),
             _table(
               ['Layer', 'Tool'],
               [
                 ['Local DB', 'Drift'],
-                ['Sync', 'PowerSync'],
+                ['Sync', 'Outbox + push_changes RPC'],
                 ['Backend', 'Supabase'],
               ],
             ),
@@ -320,7 +340,7 @@ Future<void> _seed(AppDatabase db) async {
       ),
     ]);
 
-    batch.insertAll(db.notesTagsTable, [
+    batch.insertAll(db.notesTagsTable, mode: ignore, [
       NotesTagsTableCompanion.insert(
         id: 'sync-architecture::architecture',
         noteId: 'sync-architecture',

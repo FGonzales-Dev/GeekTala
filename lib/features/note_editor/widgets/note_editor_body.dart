@@ -1,15 +1,22 @@
 import 'dart:async';
 
 import 'package:appflowy_editor/appflowy_editor.dart';
+import 'package:desktop_drop/desktop_drop.dart';
+import 'package:file_selector/file_selector.dart' show XFile;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pasteboard/pasteboard.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../data/providers/notes_providers.dart';
 import '../../../data/providers/sync_provider.dart';
 import '../../../data/sync/pending_writes.dart';
+import '../../../data/attachments/attachment_store.dart';
+import '../../../data/providers/attachments_provider.dart';
+import '../insert_images.dart';
 import '../markdown_paste.dart';
+import 'attachment_image_block.dart';
 import 'note_tag_picker.dart';
 import 'styled_title_controller.dart';
 
@@ -47,6 +54,8 @@ class NoteEditorBody extends ConsumerStatefulWidget {
 /// of focus.
 Map<String, BlockComponentBuilder> _blockComponentBuilders(bool desktop) => {
   ...standardBlockComponentBuilderMap,
+  // Shows `attachment://` images too (see AttachmentImageBlockComponentBuilder).
+  ImageBlockKeys.type: AttachmentImageBlockComponentBuilder(),
   ParagraphBlockKeys.type: ParagraphBlockComponentBuilder(
     configuration: standardBlockComponentConfiguration.copyWith(
       placeholderText: (_) =>
@@ -203,6 +212,7 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
       editorState,
       formattedByDefault: () =>
           ref.read(pasteMarkdownFormattedProvider),
+      pasteImages: () => _pasteImages(editorState),
     );
     _pasteTargets.register(noteId, markdownPaste);
     editorState.selectionNotifier.addListener(() {
@@ -241,6 +251,49 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
       _titleFocusNode = titleFocusNode;
       _toolbarTarget = _ToolbarTarget.body;
     });
+  }
+
+  /// ⌘V with image files (copied in Finder/Explorer) or a copied image —
+  /// but text wins over an image picture of it (Word/Pages put both on the
+  /// clipboard). Returns whether images were pasted.
+  Future<bool> _pasteImages(EditorState editorState) async {
+    if (!attachmentsSupported) return false;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    // Looked up only once there's an image to add.
+    AttachmentStore attachments() => ref.read(attachmentStoreProvider);
+    try {
+      final files = (await Pasteboard.files()).where(isImageFileName).toList();
+      if (files.isNotEmpty) {
+        await insertImages(attachments(), editorState, [
+          for (final path in files)
+            (bytes: await XFile(path).readAsBytes(), name: XFile(path).name),
+        ], messenger: messenger);
+        return true;
+      }
+      final text = await Pasteboard.text;
+      if (text != null && text.trim().isNotEmpty) return false;
+      final image = await Pasteboard.image;
+      if (image == null || image.isEmpty) return false;
+      await insertImages(attachments(), editorState, [
+        (bytes: image, name: 'Pasted image'),
+      ], messenger: messenger);
+      return true;
+    } catch (_) {
+      return false; // no clipboard access (e.g. tests): paste text as usual
+    }
+  }
+
+  Future<void> _dropImages(DropDoneDetails details, EditorState editorState) async {
+    final files = details.files.where((f) => isImageFileName(f.name)).toList();
+    if (files.isEmpty) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final store = ref.read(attachmentStoreProvider);
+    await insertImages(
+      store,
+      editorState,
+      [for (final file in files) (bytes: await file.readAsBytes(), name: file.name)],
+      messenger: messenger,
+    );
   }
 
   // The save closures capture the repository up front so they can still
@@ -344,7 +397,7 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
       footer: const SizedBox(height: 40),
     );
     // The bar to swap a Markdown paste, floating over the editor's bottom.
-    final editor = Stack(
+    Widget editor = Stack(
       fit: StackFit.expand,
       children: [
         editorOnly,
@@ -356,6 +409,14 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
         ),
       ],
     );
+
+    if (widget.desktop && attachmentsSupported) {
+      // Image files dragged in from Finder/Explorer.
+      editor = DropTarget(
+        onDragDone: (details) => _dropImages(details, editorState),
+        child: editor,
+      );
+    }
 
     if (!widget.desktop) {
       // This toolbar lives under appflowy_editor's toolbar/desktop/ —
@@ -383,7 +444,9 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             child: _toolbarTarget == _ToolbarTarget.title
                 ? _TitleToolbar(controller: titleController, theme: theme)
-                : FloatingToolbarWidget(
+                : Row(
+                    children: [
+                      Expanded(child: FloatingToolbarWidget(
                     items: [
                       paragraphItem,
                       ...headingItems,
@@ -401,6 +464,18 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
                     backgroundColor: Colors.transparent,
                     toolbarActiveColor: theme.colorScheme.primary,
                     toolbarIconColor: theme.colorScheme.onSurfaceVariant,
+                  )),
+                      if (attachmentsSupported)
+                        IconButton(
+                          tooltip: 'Insert image',
+                          iconSize: 18,
+                          visualDensity: VisualDensity.compact,
+                          color: theme.colorScheme.onSurfaceVariant,
+                          icon: const Icon(Icons.image_outlined),
+                          onPressed: () =>
+                              pickAndInsertImages(context, ref, editorState),
+                        ),
+                    ],
                   ),
           ),
         ),

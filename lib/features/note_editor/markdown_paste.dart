@@ -41,7 +41,11 @@ Future<void> setPasteMarkdownFormatted(WidgetRef ref, bool formatted) {
 /// Text that doesn't look like Markdown ([looksLikeMarkdown]) goes through
 /// the editor's normal paste, unchanged.
 class MarkdownPaste extends ChangeNotifier {
-  MarkdownPaste(this._editorState, {required this.formattedByDefault}) {
+  MarkdownPaste(
+    this._editorState, {
+    required this.formattedByDefault,
+    this.pasteImages,
+  }) {
     _transactions = _editorState.transactionStream.listen((_) {
       // Any edit that isn't part of a paste or swap ends the offer.
       if (!_busy) dismiss();
@@ -52,6 +56,14 @@ class MarkdownPaste extends ChangeNotifier {
 
   /// The Settings preference, read at paste time.
   final bool Function() formattedByDefault;
+
+  /// Tried first on ⌘V: pastes images on the clipboard, if any. Returns
+  /// whether it did.
+  final Future<bool> Function()? pasteImages;
+
+  /// The editor this pastes into (also used by the mobile editor's image
+  /// button, via [MarkdownPasteTargets]).
+  EditorState get editorState => _editorState;
   late final StreamSubscription<EditorTransactionValue> _transactions;
   _LastPaste? _last;
   bool _busy = false;
@@ -83,6 +95,7 @@ class MarkdownPaste extends ChangeNotifier {
   ];
 
   Future<void> _pasteFromShortcut() async {
+    if (await pasteImages?.call() ?? false) return;
     final text = (await AppFlowyClipboard.getData()).text;
     if (text == null || text.isEmpty) return;
     if (!looksLikeMarkdown(text)) {

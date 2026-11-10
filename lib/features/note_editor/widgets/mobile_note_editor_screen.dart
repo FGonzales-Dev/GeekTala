@@ -7,6 +7,7 @@ import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/sync_status_indicator.dart';
 import '../../../data/providers/notes_providers.dart';
 import '../markdown_io.dart';
+import '../insert_images.dart';
 import '../markdown_paste.dart';
 import 'note_editor_body.dart';
 
@@ -120,7 +121,31 @@ class MobileNoteEditorScreen extends ConsumerWidget {
                 children: [
                   AppIcon(AppIconName.bold, size: 18, color: theme.colorScheme.onSurfaceVariant),
                   AppIcon(AppIconName.textLines, size: 18, color: theme.colorScheme.onSurfaceVariant),
-                  AppIcon(AppIconName.image, size: 18, color: theme.colorScheme.onSurfaceVariant),
+                  // Insert an image (the other icons aren't wired up yet).
+                  InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: attachmentsSupported
+                        ? () {
+                            final paste =
+                                ref.read(markdownPasteTargetsProvider)[noteId];
+                            if (paste != null) {
+                              pickAndInsertImages(
+                                context,
+                                ref,
+                                paste.editorState,
+                              );
+                            }
+                          }
+                        : null,
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: AppIcon(
+                        AppIconName.image,
+                        size: 18,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
                   AppIcon(AppIconName.code, size: 18, color: theme.colorScheme.onSurfaceVariant),
                   AppIcon(AppIconName.grid, size: 18, color: theme.colorScheme.onSurfaceVariant),
                 ],
