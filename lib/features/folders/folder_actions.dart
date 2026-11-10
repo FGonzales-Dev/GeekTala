@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/widgets/undo_snack_bar.dart';
 import '../../data/providers/folders_providers.dart';
 import '../../data/providers/notes_providers.dart';
+import 'collapsed_folders_provider.dart';
 
 // Moves and deletes shared by drag and drop and the "Move to…"/"Delete"
 // menus, each followed by an Undo snack bar. The messenger and router are
@@ -47,13 +48,17 @@ Future<void> moveFolderTo(
   final tree = ref.read(folderTreeProvider);
   final name = tree[folderId]?.name ?? 'Folder';
   final sameParent = tree[folderId]?.parentId == parentId;
+  final collapsed = ref.read(collapsedFoldersProvider.notifier);
 
   final undo = await repository.moveFolder(
     folderId,
     parentId: parentId,
     index: index,
   );
-  if (undo == null || messenger == null) return;
+  if (undo == null) return;
+  // Moved into a collapsed folder: open it, so the folder doesn't vanish.
+  if (parentId != null) collapsed.expand(parentId);
+  if (messenger == null) return;
   showUndoSnackBar(
     messenger,
     sameParent

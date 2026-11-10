@@ -15,7 +15,6 @@ import 'package:noote/data/providers/sync_provider.dart';
 import 'package:noote/data/repositories/folders_repository.dart';
 import 'package:noote/data/sync/app_sync_status.dart';
 import 'package:noote/features/folders/drag_data.dart';
-import 'package:noote/features/shell/adaptive_shell_screen.dart';
 
 /// Drag and drop in the real desktop shell, against an in-memory database
 /// with the demo content. Database work is real async, so each test runs
@@ -61,23 +60,7 @@ void main() {
           syncStatusProvider.overrideWithValue(AppSyncStatus.idle),
           syncCoordinatorProvider.overrideWith((ref) {}),
           goRouterProvider.overrideWithValue(
-            GoRouter(
-              initialLocation: '/',
-              routes: [
-                GoRoute(
-                  path: '/',
-                  builder: (context, state) =>
-                      const AdaptiveShellScreen(currentPath: '/'),
-                ),
-                GoRoute(
-                  path: '/notes/:noteId',
-                  builder: (context, state) => AdaptiveShellScreen(
-                    currentPath: '/',
-                    noteId: state.pathParameters['noteId'],
-                  ),
-                ),
-              ],
-            ),
+            GoRouter(initialLocation: '/', routes: appRoutes),
           ),
         ],
         child: const NooteApp(),
@@ -232,6 +215,73 @@ void main() {
       expect(t.parentOf('engineering'), 'work');
       expect(find.byType(SnackBar), findsNothing);
       expect(await db.syncDao.pendingCount(), 16); // just the seed
+
+      await unmount(tester);
+    });
+  });
+
+  testWidgets('subfolders can be hidden and shown again', (tester) async {
+    await tester.runAsync(() async {
+      await pumpApp(tester);
+      expect(find.text('Product Specs'), findsOneWidget);
+
+      // Work is the only folder with subfolders in the demo content.
+      await tester.tap(find.byTooltip('Hide subfolders'));
+      await settle(tester);
+      expect(find.text('Product Specs'), findsNothing);
+      expect(find.byTooltip('Show subfolders'), findsOneWidget);
+      // Remembered on this device.
+      await waitFor(
+        tester,
+        () async =>
+            await db.syncDao.readState('pref.collapsed_folders') == '["work"]',
+      );
+
+      await tester.tap(find.byTooltip('Show subfolders'));
+      await settle(tester);
+      expect(find.text('Product Specs'), findsOneWidget);
+
+      await unmount(tester);
+    });
+  });
+
+  testWidgets('a dragged note held over a hidden folder opens it', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      await pumpApp(tester);
+      await tester.tap(find.byTooltip('Hide subfolders'));
+      await settle(tester);
+      expect(find.text('Product Specs'), findsNothing);
+
+      final from = tester.getCenter(find.text('API Auth Flow'));
+      final work = sidebarRow(tester, 'Work').center;
+      final gesture = await tester.startGesture(
+        from,
+        kind: PointerDeviceKind.mouse,
+      );
+      for (var i = 1; i <= 12; i++) {
+        await gesture.moveTo(Offset.lerp(from, work, i / 12)!);
+        await tester.pump();
+      }
+      // Hold still over Work until it opens.
+      for (var i = 0; i < 12; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.text('Product Specs'), findsOneWidget);
+
+      final specs = sidebarRow(tester, 'Product Specs').center;
+      for (var i = 1; i <= 6; i++) {
+        await gesture.moveTo(Offset.lerp(work, specs, i / 6)!);
+        await tester.pump();
+      }
+      await gesture.up();
+      await gesture.removePointer();
+      await waitFor(
+        tester,
+        () async => (await note('api-auth-flow')).folderId == 'product-specs',
+      );
 
       await unmount(tester);
     });

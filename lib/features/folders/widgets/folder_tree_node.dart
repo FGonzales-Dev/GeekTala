@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,13 +8,15 @@ import '../../../core/widgets/drag_auto_scroll.dart';
 import '../../../data/models/folder.dart';
 import '../../../data/models/folder_tree.dart';
 import '../../../data/providers/folders_providers.dart';
+import '../collapsed_folders_provider.dart';
 import '../drag_data.dart';
 import '../folder_actions.dart';
 import 'delete_folder_dialog.dart';
 import 'folder_name_dialog.dart';
 import 'move_to_folder_picker.dart';
 
-/// Renders [folder] via [rowBuilder], then recurses into its children —
+/// Renders [folder] via [rowBuilder], then recurses into its children
+/// (unless it's collapsed — see [collapsedFoldersProvider]) —
 /// arbitrary depth, not hardcoded to one level. Shared by the desktop
 /// sidebar and the mobile Folders screen; each supplies its own row visual
 /// via [rowBuilder] so this widget only owns the tree structure, the
@@ -45,6 +49,12 @@ class FolderTreeNode extends ConsumerWidget {
     required bool selected,
     required int noteCount,
     required VoidCallback onTap,
+
+    /// Whether the subfolders are showing; null when there are none.
+    bool? expanded,
+
+    /// Shows/hides the subfolders (the row's disclosure arrow).
+    VoidCallback? onToggle,
   })
   rowBuilder;
 
@@ -54,6 +64,12 @@ class FolderTreeNode extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final children = tree.childrenOf(folder.id);
+    final collapsed = ref.watch(
+      collapsedFoldersProvider.select((ids) => ids.contains(folder.id)),
+    );
+    final expanded = children.isEmpty ? null : !collapsed;
+
     Widget row = GestureDetector(
       onSecondaryTapDown: (details) =>
           _showActionsMenu(context, ref, details.globalPosition),
@@ -66,6 +82,10 @@ class FolderTreeNode extends ConsumerWidget {
         selected: folder.id == selectedFolderId,
         noteCount: noteCounts[folder.id] ?? 0,
         onTap: () => onSelect(folder.id),
+        expanded: expanded,
+        onToggle: expanded == null
+            ? null
+            : () => ref.read(collapsedFoldersProvider.notifier).toggle(folder.id),
       ),
     );
     if (dragAndDrop) {
@@ -82,18 +102,19 @@ class FolderTreeNode extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         row,
-        for (final child in tree.childrenOf(folder.id))
-          FolderTreeNode(
-            key: ValueKey(child.id),
-            folder: child,
-            tree: tree,
-            depth: depth + 1,
-            noteCounts: noteCounts,
-            selectedFolderId: selectedFolderId,
-            onSelect: onSelect,
-            rowBuilder: rowBuilder,
-            dragAndDrop: dragAndDrop,
-          ),
+        if (expanded ?? false)
+          for (final child in children)
+            FolderTreeNode(
+              key: ValueKey(child.id),
+              folder: child,
+              tree: tree,
+              depth: depth + 1,
+              noteCounts: noteCounts,
+              selectedFolderId: selectedFolderId,
+              onSelect: onSelect,
+              rowBuilder: rowBuilder,
+              dragAndDrop: dragAndDrop,
+            ),
       ],
     );
   }
@@ -202,13 +223,28 @@ class _FolderDragAndDropState extends ConsumerState<_FolderDragAndDrop> {
 
   _DropZone? _zone;
 
+  /// Opens a collapsed folder when something is held over it while
+  /// dragging, so it can be dropped deeper in.
+  Timer? _openTimer;
+  static const _openAfter = Duration(milliseconds: 700);
+
   Folder get _folder => widget.folder;
   FolderTree get _tree => widget.tree;
 
+  bool get _collapsed =>
+      ref.read(collapsedFoldersProvider).contains(_folder.id);
+
   /// The bottom edge of a folder with subfolders listed under it means
   /// "first inside it", not "after it" (which is below all of those).
+  /// When it's collapsed they aren't listed, so it means "after it".
   bool _bottomMeansFirstChild(String draggedId) =>
-      _tree.childrenOf(_folder.id).any((f) => f.id != draggedId);
+      !_collapsed && _tree.childrenOf(_folder.id).any((f) => f.id != draggedId);
+
+  @override
+  void dispose() {
+    _openTimer?.cancel();
+    super.dispose();
+  }
 
   /// Where dropping [draggedId] in [zone] puts it, or null if it can't go
   /// there or is already there.
@@ -264,6 +300,18 @@ class _FolderDragAndDropState extends ConsumerState<_FolderDragAndDrop> {
 
   void _setZone(_DropZone? zone) {
     if (zone != _zone) setState(() => _zone = zone);
+    final hoveringInside = zone == _DropZone.into && _collapsed;
+    if (!hoveringInside) {
+      _openTimer?.cancel();
+      _openTimer = null;
+    } else {
+      _openTimer ??= Timer(_openAfter, () {
+        _openTimer = null;
+        if (mounted) {
+          ref.read(collapsedFoldersProvider.notifier).expand(_folder.id);
+        }
+      });
+    }
   }
 
   Future<void> _drop(NooteDragData data, _DropZone zone) async {

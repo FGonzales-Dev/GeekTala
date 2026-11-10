@@ -9,6 +9,7 @@ import '../../core/widgets/app_icon.dart';
 import '../../data/providers/folders_providers.dart';
 import '../../data/providers/notes_providers.dart';
 import '../shell/providers/selected_folder_provider.dart';
+import 'widgets/folder_disclosure.dart';
 import 'widgets/folder_name_dialog.dart';
 import 'widgets/folder_tree_node.dart';
 
@@ -77,6 +78,8 @@ class FoldersScreen extends ConsumerWidget {
                       required selected,
                       required noteCount,
                       required onTap,
+                      expanded,
+                      onToggle,
                     }) {
                       return _FolderRow(
                         name: folder.name,
@@ -84,6 +87,8 @@ class FoldersScreen extends ConsumerWidget {
                         depth: depth,
                         selected: selected,
                         onTap: onTap,
+                        expanded: expanded,
+                        onToggle: onToggle,
                       );
                     },
                   ),
@@ -184,6 +189,8 @@ class _FolderRow extends StatelessWidget {
     required this.depth,
     required this.selected,
     required this.onTap,
+    this.expanded,
+    this.onToggle,
   });
 
   final String name;
@@ -191,6 +198,8 @@ class _FolderRow extends StatelessWidget {
   final int depth;
   final bool selected;
   final VoidCallback onTap;
+  final bool? expanded;
+  final VoidCallback? onToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -204,9 +213,17 @@ class _FolderRow extends StatelessWidget {
           color: selected ? colors.activeBg : null,
           borderRadius: BorderRadius.circular(AppRadius.small),
         ),
-        padding: EdgeInsets.fromLTRB(10 + depth * 18, 8, 10, 8),
+        padding: EdgeInsets.fromLTRB(4 + depth * 18, 8, 10, 8),
         child: Row(
           children: [
+            // A bigger tap target on touch screens.
+            FolderDisclosure(
+              expanded: expanded,
+              onToggle: onToggle,
+              size: 18,
+              color: colors.textFaint,
+            ),
+            const SizedBox(width: 2),
             AppIcon(AppIconName.folder, size: 15, color: colors.textFaint),
             const SizedBox(width: 10),
             Expanded(

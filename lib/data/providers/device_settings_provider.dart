@@ -9,6 +9,7 @@ abstract final class DeviceSettingKeys {
   static const notesListWidth = 'pref.notes_list_width';
   static const pasteMarkdown = 'pref.paste_markdown';
   static const autoSync = 'pref.auto_sync';
+  static const collapsedFolders = 'pref.collapsed_folders';
 }
 
 /// Small preferences for this device (theme, pane widths, …), kept in the

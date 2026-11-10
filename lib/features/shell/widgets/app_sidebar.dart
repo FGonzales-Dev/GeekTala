@@ -15,6 +15,7 @@ import '../../../data/providers/tags_providers.dart';
 import '../../folders/drag_data.dart';
 import '../../folders/folder_actions.dart';
 import '../../folders/widgets/delete_folder_dialog.dart';
+import '../../folders/widgets/folder_disclosure.dart';
 import '../../folders/widgets/folder_name_dialog.dart';
 import '../../folders/widgets/folder_tree_node.dart';
 import '../../settings/widgets/settings_dialog.dart';
@@ -121,6 +122,8 @@ class AppSidebar extends ConsumerWidget {
                           required selected,
                           required noteCount,
                           required onTap,
+                          expanded,
+                          onToggle,
                         }) {
                           return _NavItem(
                             icon: AppIconName.folder,
@@ -129,6 +132,12 @@ class AppSidebar extends ConsumerWidget {
                             selected: selected,
                             depth: depth,
                             onTap: onTap,
+                            leading: FolderDisclosure(
+                              expanded: expanded,
+                              onToggle: onToggle,
+                              size: 12,
+                              color: context.nooteColors.textFaint,
+                            ),
                           );
                         },
                       ),
@@ -332,6 +341,7 @@ class _NavItem extends StatelessWidget {
     this.depth = 0,
     this.onTap,
     this.dropHighlight = false,
+    this.leading,
   }) : assert(icon != null || materialIcon != null);
 
   final AppIconName? icon;
@@ -347,6 +357,9 @@ class _NavItem extends StatelessWidget {
 
   /// Something droppable is hovering over this row.
   final bool dropHighlight;
+
+  /// Before the icon — a folder's show/hide-subfolders arrow.
+  final Widget? leading;
 
   @override
   Widget build(BuildContext context) {
@@ -373,6 +386,7 @@ class _NavItem extends StatelessWidget {
         ),
         child: Row(
           children: [
+            if (leading != null) ...[leading!, const SizedBox(width: 2)],
             if (materialIcon != null)
               Icon(materialIcon, size: 14, color: fg.withValues(alpha: 0.85))
             else
