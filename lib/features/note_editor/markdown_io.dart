@@ -6,6 +6,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path/path.dart' as p;
 
 import '../../data/models/note.dart';
 import '../../data/attachments/attachment_store.dart';
@@ -63,11 +64,47 @@ Future<void> importMarkdownNote(
 /// Picks a folder and imports every Markdown file in it, keeping its
 /// subfolders (see [importMarkdownDirectory]) — e.g. an export from Apple
 /// Notes or Obsidian. Opens the new folder when done.
+///
+/// If a top-level folder with the same name already exists (e.g. an earlier
+/// import of the same export), asks whether to add only the notes that
+/// aren't there yet or import everything as a separate folder.
 Future<void> importMarkdownFolder(BuildContext context, WidgetRef ref) async {
   final path = await getDirectoryPath(confirmButtonText: 'Import');
   if (path == null || !context.mounted) return;
   final messenger = ScaffoldMessenger.of(context);
   final navigator = Navigator.of(context, rootNavigator: true);
+
+  final name = p.basename(p.normalize(path));
+  var addMissingOnly = false;
+  if (ref.read(folderTreeProvider).roots.any((f) => f.name == name)) {
+    final choice = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Add to "$name"?'),
+        content: Text(
+          'You already have a folder named "$name". Add only the notes that '
+          'aren\'t in it yet, or import everything as a separate folder?\n\n'
+          'Notes already there (same folder and title) are left as they are.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Import as Separate Folder'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Add Missing Notes'),
+          ),
+        ],
+      ),
+    );
+    if (choice == null || !context.mounted) return;
+    addMissingOnly = choice;
+  }
 
   showDialog<void>(
     context: context,
@@ -98,6 +135,7 @@ Future<void> importMarkdownFolder(BuildContext context, WidgetRef ref) async {
       attachments: attachmentsSupported
           ? ref.read(attachmentStoreProvider)
           : null,
+      addMissingOnly: addMissingOnly,
     );
   } catch (e) {
     error = e;
@@ -115,11 +153,18 @@ Future<void> importMarkdownFolder(BuildContext context, WidgetRef ref) async {
   ref.read(isViewingTrashProvider.notifier).exit();
   final n = result.notes;
   final failed = result.failedFiles.length;
+  final notes = '$n ${n == 1 ? 'note' : 'notes'}';
+  final skipped = result.skippedNotes;
   messenger.showSnackBar(
     SnackBar(
       content: Text(
-        'Imported $n ${n == 1 ? 'note' : 'notes'} into "${result.folderName}"'
-        '${failed == 0 ? '' : '; $failed ${failed == 1 ? 'file' : 'files'} couldn\'t be read'}.',
+        (addMissingOnly
+            ? 'Added $notes to "${result.folderName}"; $skipped '
+                  '${skipped == 1 ? 'was' : 'were'} already there'
+            : 'Imported $notes into "${result.folderName}"') +
+            (failed == 0
+                ? '.'
+                : '; $failed ${failed == 1 ? 'file' : 'files'} couldn\'t be read.'),
       ),
     ),
   );
@@ -128,7 +173,7 @@ Future<void> importMarkdownFolder(BuildContext context, WidgetRef ref) async {
 /// Converts the note's already-persisted body to markdown (via
 /// appflowy_editor's `documentToMarkdown`) and offers a native save dialog.
 Future<void> exportNoteAsMarkdown(BuildContext context, Note note) async {
-  final markdown = documentToMarkdown(Document.fromJson(note.body));
+  final markdown = noteDocumentToMarkdown(Document.fromJson(note.body));
   final suggestedName = note.title.trim().isEmpty ? 'Untitled' : note.title;
 
   final location = await getSaveLocation(

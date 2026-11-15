@@ -20,21 +20,52 @@ const _extensions = {'.md', '.markdown', '.txt'};
 /// transaction.
 ///
 /// With [attachments], images a note links to by relative path
-/// (`![](images/photo.jpg)`) are added as attachments. Hidden files and
+/// (`![](images/photo.jpg)`) are added as attachments, and so is any other
+/// file linked on a line of its own (`[Kit.pdf](files/Kit.pdf)`), which
+/// becomes a file block. Hidden files and
 /// folders are skipped, and so are folders holding only other files (like
 /// those images) — but empty folders are kept.
+///
+/// With [addMissingOnly], it adds to what's already there instead: a
+/// top-level folder with the same name, and same-named folders inside it,
+/// are reused, and a note is skipped if its folder already has an active
+/// note with the same title — e.g. to bring in what's new in a fresh export
+/// without duplicating (or overwriting) notes imported earlier.
 Future<FolderImportResult> importMarkdownDirectory(
   String path, {
   required AppDatabase db,
   required FoldersRepository folders,
   required NotesRepository notes,
   AttachmentStore? attachments,
+  bool addMissingOnly = false,
 }) async {
   final root = Directory(path);
   final name = p.basename(p.normalize(path));
   var noteCount = 0;
   var folderCount = 0;
+  var skipped = 0;
   final failed = <String>[];
+
+  // What's already there, for addMissingOnly.
+  final existingFolders = addMissingOnly
+      ? await db.foldersDao.getAllFoldersOnce()
+      : const <FolderRow>[];
+  String? existingFolder(String? parentId, String name) {
+    for (final f in existingFolders) {
+      if (f.parentId == parentId && f.name == name) return f.id;
+    }
+    return null;
+  }
+
+  final titlesByFolder = <String?, Set<String>>{};
+  if (addMissingOnly) {
+    final rows = await (db.select(
+      db.notesTable,
+    )..where((n) => n.isDeleted.equals(false))).get();
+    for (final row in rows) {
+      (titlesByFolder[row.folderId] ??= {}).add(row.title);
+    }
+  }
 
   late String rootId;
   await db.transaction(() async {
@@ -51,26 +82,45 @@ Future<FolderImportResult> importMarkdownDirectory(
         if (base.startsWith('.')) continue;
         if (entry is Directory) {
           if (!await _worthImporting(entry)) continue;
-          final id = await folders.createFolder(name: base, parentId: folderId);
-          folderCount++;
+          var id = existingFolder(folderId, base);
+          if (id == null) {
+            id = await folders.createFolder(name: base, parentId: folderId);
+            folderCount++;
+          }
           await walk(entry, id);
         } else if (entry is File &&
             _extensions.contains(p.extension(base).toLowerCase())) {
+          final title = p.basenameWithoutExtension(base);
+          final titles = titlesByFolder[folderId] ??= {};
+          if (addMissingOnly && titles.contains(title)) {
+            skipped++;
+            continue;
+          }
           try {
             var markdown = await entry.readAsString();
+            var files = const <String, ({String name, int size})>{};
             if (attachments != null) {
               markdown = await _importLinkedImages(
                 markdown,
                 from: entry.parent.path,
                 attachments: attachments,
               );
+              (markdown, files) = await _importLinkedFiles(
+                markdown,
+                from: entry.parent.path,
+                attachments: attachments,
+              );
             }
+            Map<String, dynamic> body = noteMarkdownToDocument(markdown)
+                .toJson();
+            if (files.isNotEmpty) body = _toFileBlocks(body, files);
             await notes.createNote(
               folderId: folderId,
-              title: p.basenameWithoutExtension(base),
-              body: noteMarkdownToDocument(markdown).toJson(),
+              title: title,
+              body: body,
               modifiedAt: await entry.lastModified(),
             );
+            titles.add(title);
             noteCount++;
           } catch (_) {
             failed.add(p.relative(entry.path, from: root.path));
@@ -79,8 +129,13 @@ Future<FolderImportResult> importMarkdownDirectory(
       }
     }
 
-    rootId = await folders.createFolder(name: name);
-    folderCount++;
+    final existingRoot = existingFolder(null, name);
+    if (existingRoot != null) {
+      rootId = existingRoot;
+    } else {
+      rootId = await folders.createFolder(name: name);
+      folderCount++;
+    }
     await walk(root, rootId);
   });
 
@@ -89,6 +144,7 @@ Future<FolderImportResult> importMarkdownDirectory(
     folderName: name,
     notes: noteCount,
     folders: folderCount,
+    skippedNotes: skipped,
     failedFiles: failed,
   );
 }
@@ -142,4 +198,89 @@ Future<String> _importLinkedImages(
     final ref = replacements[m.group(2)];
     return ref == null ? m.group(0)! : '![${m.group(1)}]($ref)';
   });
+}
+
+/// A line that's nothing but a link: `[Kit.pdf](files/Kit.pdf)`.
+final _fileLinkLine = RegExp(
+  r'^[ \t]*\[([^\]\n]+)\]\(<?([^)>\n]+?)>?\)[ \t]*$',
+  multiLine: true,
+);
+
+/// Adds files linked on a line of their own as attachments. Each such line
+/// becomes an image-style link to the attachment, which [_toFileBlocks]
+/// then turns into a file block (images stay pictures). Links to the web,
+/// to other notes, and to missing files stay as they are.
+Future<(String, Map<String, ({String name, int size})>)> _importLinkedFiles(
+  String markdown, {
+  required String from,
+  required AttachmentStore attachments,
+}) async {
+  final files = <String, ({String name, int size})>{};
+  final lines = <String, String>{}; // matched line -> replacement
+  for (final match in _fileLinkLine.allMatches(markdown)) {
+    final line = match.group(0)!;
+    final name = match.group(1)!.trim();
+    final target = match.group(2)!.trim();
+    if (lines.containsKey(line) ||
+        target.contains(':') ||
+        target.startsWith('#')) {
+      continue;
+    }
+    String decoded;
+    try {
+      decoded = Uri.decodeComponent(target);
+    } catch (_) {
+      decoded = target;
+    }
+    final file = File(p.normalize(p.join(from, decoded)));
+    final extension = p
+        .extension(file.path)
+        .replaceFirst('.', '')
+        .toLowerCase();
+    if (_extensions.contains('.$extension') || !await file.exists()) continue;
+    if (isImageExtension(extension)) {
+      lines[line] = '![](${await attachments.addImageFile(file.path)})';
+    } else {
+      final ref = await attachments.addFileFromPath(file.path);
+      files[ref] = (name: name, size: await file.length());
+      lines[line] = '![]($ref)';
+    }
+  }
+  if (lines.isEmpty) return (markdown, files);
+  final rewritten = markdown.replaceAllMapped(
+    _fileLinkLine,
+    (m) => lines[m.group(0)!] ?? m.group(0)!,
+  );
+  return (rewritten, files);
+}
+
+/// The image blocks pointing at [files] become file blocks (with the name
+/// and size to show before the file is downloaded).
+Map<String, dynamic> _toFileBlocks(
+  Map<String, dynamic> body,
+  Map<String, ({String name, int size})> files,
+) {
+  Object? convert(Object? node) {
+    if (node is! Map) return node;
+    final data = node['data'];
+    final url = data is Map ? data['url'] : null;
+    final file = url is String ? files[url] : null;
+    if (node['type'] == 'image' && file != null) {
+      return {
+        'type': FileBlockKeys.type,
+        'data': {
+          FileBlockKeys.url: url,
+          FileBlockKeys.name: file.name,
+          FileBlockKeys.size: file.size,
+        },
+      };
+    }
+    final children = node['children'];
+    return {
+      ...node,
+      if (children is List) 'children': [for (final c in children) convert(c)],
+    };
+  }
+
+  return {...body, 'document': convert(body['document'])};
 }

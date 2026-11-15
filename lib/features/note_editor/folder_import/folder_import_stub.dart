@@ -13,6 +13,7 @@ Future<FolderImportResult> importMarkdownDirectory(
   required FoldersRepository folders,
   required NotesRepository notes,
   AttachmentStore? attachments,
+  bool addMissingOnly = false,
 }) {
   throw UnsupportedError('Importing a folder needs a file system.');
 }
