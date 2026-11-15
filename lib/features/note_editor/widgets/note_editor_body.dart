@@ -12,10 +12,12 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../data/providers/notes_providers.dart';
 import '../../../data/providers/sync_provider.dart';
 import '../../../data/sync/pending_writes.dart';
+import '../../../data/attachments/attachment_refs.dart';
 import '../../../data/attachments/attachment_store.dart';
 import '../../../data/providers/attachments_provider.dart';
-import '../insert_images.dart';
+import '../insert_attachments.dart';
 import '../markdown_paste.dart';
+import 'attachment_file_block.dart';
 import 'attachment_image_block.dart';
 import 'note_tag_picker.dart';
 import 'styled_title_controller.dart';
@@ -56,6 +58,8 @@ Map<String, BlockComponentBuilder> _blockComponentBuilders(bool desktop) => {
   ...standardBlockComponentBuilderMap,
   // Shows `attachment://` images too (see AttachmentImageBlockComponentBuilder).
   ImageBlockKeys.type: AttachmentImageBlockComponentBuilder(),
+  // PDFs, recordings and other files (see AttachmentFileBlockComponentBuilder).
+  FileBlockKeys.type: AttachmentFileBlockComponentBuilder(),
   ParagraphBlockKeys.type: ParagraphBlockComponentBuilder(
     configuration: standardBlockComponentConfiguration.copyWith(
       placeholderText: (_) =>
@@ -212,7 +216,7 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
       editorState,
       formattedByDefault: () =>
           ref.read(pasteMarkdownFormattedProvider),
-      pasteImages: () => _pasteImages(editorState),
+      pasteFiles: () => _pasteFiles(editorState),
     );
     _pasteTargets.register(noteId, markdownPaste);
     editorState.selectionNotifier.addListener(() {
@@ -253,28 +257,35 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
     });
   }
 
-  /// ⌘V with image files (copied in Finder/Explorer) or a copied image —
-  /// but text wins over an image picture of it (Word/Pages put both on the
-  /// clipboard). Returns whether images were pasted.
-  Future<bool> _pasteImages(EditorState editorState) async {
+  /// ⌘V with files copied in Finder/Explorer (images go in as pictures,
+  /// anything else as file blocks) or a copied picture — but text wins over
+  /// a picture of it (Word/Pages put both on the clipboard). Returns
+  /// whether anything was pasted.
+  Future<bool> _pasteFiles(EditorState editorState) async {
     if (!attachmentsSupported) return false;
     final messenger = ScaffoldMessenger.maybeOf(context);
-    // Looked up only once there's an image to add.
+    // Looked up only once there's something to add.
     AttachmentStore attachments() => ref.read(attachmentStoreProvider);
     try {
-      final files = (await Pasteboard.files()).where(isImageFileName).toList();
-      if (files.isNotEmpty) {
-        await insertImages(attachments(), editorState, [
-          for (final path in files)
-            (bytes: await XFile(path).readAsBytes(), name: XFile(path).name),
-        ], messenger: messenger);
+      final paths = await Pasteboard.files();
+      if (paths.isNotEmpty) {
+        final files = await readFiles(
+          paths.map(XFile.new),
+          messenger: messenger,
+        );
+        await insertFiles(
+          attachments(),
+          editorState,
+          files,
+          messenger: messenger,
+        );
         return true;
       }
       final text = await Pasteboard.text;
       if (text != null && text.trim().isNotEmpty) return false;
       final image = await Pasteboard.image;
       if (image == null || image.isEmpty) return false;
-      await insertImages(attachments(), editorState, [
+      await insertFiles(attachments(), editorState, [
         (bytes: image, name: 'Pasted image'),
       ], messenger: messenger);
       return true;
@@ -283,17 +294,13 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
     }
   }
 
-  Future<void> _dropImages(DropDoneDetails details, EditorState editorState) async {
-    final files = details.files.where((f) => isImageFileName(f.name)).toList();
-    if (files.isEmpty) return;
+  /// Files dragged in from Finder/Explorer.
+  Future<void> _dropFiles(DropDoneDetails details, EditorState editorState) async {
+    if (details.files.isEmpty) return;
     final messenger = ScaffoldMessenger.maybeOf(context);
     final store = ref.read(attachmentStoreProvider);
-    await insertImages(
-      store,
-      editorState,
-      [for (final file in files) (bytes: await file.readAsBytes(), name: file.name)],
-      messenger: messenger,
-    );
+    final files = await readFiles(details.files, messenger: messenger);
+    await insertFiles(store, editorState, files, messenger: messenger);
   }
 
   // The save closures capture the repository up front so they can still
@@ -411,9 +418,9 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
     );
 
     if (widget.desktop && attachmentsSupported) {
-      // Image files dragged in from Finder/Explorer.
+      // Files dragged in from Finder/Explorer.
       editor = DropTarget(
-        onDragDone: (details) => _dropImages(details, editorState),
+        onDragDone: (details) => _dropFiles(details, editorState),
         child: editor,
       );
     }
@@ -467,13 +474,13 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
                   )),
                       if (attachmentsSupported)
                         IconButton(
-                          tooltip: 'Insert image',
+                          tooltip: 'Add image or file',
                           iconSize: 18,
                           visualDensity: VisualDensity.compact,
                           color: theme.colorScheme.onSurfaceVariant,
-                          icon: const Icon(Icons.image_outlined),
+                          icon: const Icon(Icons.attach_file),
                           onPressed: () =>
-                              pickAndInsertImages(context, ref, editorState),
+                              pickAndInsertFiles(context, ref, editorState),
                         ),
                     ],
                   ),

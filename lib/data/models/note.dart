@@ -50,6 +50,11 @@ sealed class Note with _$Note {
     final buffer = StringBuffer();
 
     void walk(Map node) {
+      // A file's name, so a note can be found by what's attached to it.
+      if (node['type'] == 'file') {
+        final name = (node['data'] as Map?)?['name'];
+        if (name is String) buffer.write('$name ');
+      }
       final delta = (node['data'] as Map?)?['delta'] as List?;
       if (delta != null) {
         for (final op in delta) {

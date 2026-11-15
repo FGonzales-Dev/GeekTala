@@ -26,6 +26,12 @@ class AttachmentStore {
   Future<String> addImageFile(String path) =>
       throw UnsupportedError('Attachments need a file system.');
 
+  Future<String> addFile(Uint8List bytes, {required String fileName}) =>
+      throw UnsupportedError('Attachments need a file system.');
+
+  Future<String> addFileFromPath(String path) =>
+      throw UnsupportedError('Attachments need a file system.');
+
   /// A dart:io `File` on other platforms; never anything here.
   Future<Object?> ensureLocal(String id) async => null;
 

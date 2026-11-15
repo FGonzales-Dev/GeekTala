@@ -1,6 +1,8 @@
 import 'package:appflowy_editor/appflowy_editor.dart';
 import 'package:markdown/markdown.dart' as md;
 
+import '../../data/attachments/attachment_refs.dart';
+
 /// Markdown → editor document, for pasting and importing Markdown.
 ///
 /// appflowy_editor's own `markdownToDocument`, plus fenced code blocks,
@@ -16,6 +18,31 @@ Document noteMarkdownToDocument(String markdown) {
     return Document.blank(withInitialText: true);
   }
   return document;
+}
+
+/// Editor document → Markdown, for Export as Markdown: appflowy_editor's
+/// own `documentToMarkdown`, plus file blocks (which it would skip) as a
+/// `[name](attachment://…)` line.
+String noteDocumentToMarkdown(Document document) {
+  return documentToMarkdown(
+    document,
+    customParsers: const [_FileNodeParser()],
+  );
+}
+
+class _FileNodeParser extends NodeParser {
+  const _FileNodeParser();
+
+  @override
+  String get id => FileBlockKeys.type;
+
+  @override
+  String transform(Node node, DocumentMarkdownEncoder? encoder) {
+    final name = (node.attributes[FileBlockKeys.name] as String?) ?? 'File';
+    final label = name.replaceAll('[', r'\[').replaceAll(']', r'\]');
+    final suffix = node.next == null ? '' : '\n';
+    return '[$label](${node.attributes[FileBlockKeys.url]})$suffix';
+  }
 }
 
 /// ```` ``` ```` / `~~~` blocks → one paragraph in inline `code` style.

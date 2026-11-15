@@ -7,7 +7,7 @@ import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/sync_status_indicator.dart';
 import '../../../data/providers/notes_providers.dart';
 import '../markdown_io.dart';
-import '../insert_images.dart';
+import '../insert_attachments.dart';
 import '../markdown_paste.dart';
 import 'note_editor_body.dart';
 
@@ -121,7 +121,8 @@ class MobileNoteEditorScreen extends ConsumerWidget {
                 children: [
                   AppIcon(AppIconName.bold, size: 18, color: theme.colorScheme.onSurfaceVariant),
                   AppIcon(AppIconName.textLines, size: 18, color: theme.colorScheme.onSurfaceVariant),
-                  // Insert an image (the other icons aren't wired up yet).
+                  // Add an image or file (the other icons aren't wired up
+                  // yet).
                   InkWell(
                     borderRadius: BorderRadius.circular(16),
                     onTap: attachmentsSupported
@@ -129,7 +130,7 @@ class MobileNoteEditorScreen extends ConsumerWidget {
                             final paste =
                                 ref.read(markdownPasteTargetsProvider)[noteId];
                             if (paste != null) {
-                              pickAndInsertImages(
+                              pickAndInsertFiles(
                                 context,
                                 ref,
                                 paste.editorState,

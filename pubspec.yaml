@@ -65,6 +65,7 @@ dependencies:
   pasteboard: ^0.6.0
   desktop_drop: ^0.8.4
   provider: ^6.1.5+1
+  url_launcher: ^6.3.2
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -44,7 +44,7 @@ class MarkdownPaste extends ChangeNotifier {
   MarkdownPaste(
     this._editorState, {
     required this.formattedByDefault,
-    this.pasteImages,
+    this.pasteFiles,
   }) {
     _transactions = _editorState.transactionStream.listen((_) {
       // Any edit that isn't part of a paste or swap ends the offer.
@@ -57,9 +57,9 @@ class MarkdownPaste extends ChangeNotifier {
   /// The Settings preference, read at paste time.
   final bool Function() formattedByDefault;
 
-  /// Tried first on ⌘V: pastes images on the clipboard, if any. Returns
-  /// whether it did.
-  final Future<bool> Function()? pasteImages;
+  /// Tried first on ⌘V: pastes files or a picture on the clipboard, if
+  /// any. Returns whether it did.
+  final Future<bool> Function()? pasteFiles;
 
   /// The editor this pastes into (also used by the mobile editor's image
   /// button, via [MarkdownPasteTargets]).
@@ -95,7 +95,7 @@ class MarkdownPaste extends ChangeNotifier {
   ];
 
   Future<void> _pasteFromShortcut() async {
-    if (await pasteImages?.call() ?? false) return;
+    if (await pasteFiles?.call() ?? false) return;
     final text = (await AppFlowyClipboard.getData()).text;
     if (text == null || text.isEmpty) return;
     if (!looksLikeMarkdown(text)) {

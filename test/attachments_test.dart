@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:appflowy_editor/appflowy_editor.dart';
@@ -13,7 +14,9 @@ import 'package:noote/data/repositories/notes_repository.dart';
 import 'package:noote/data/sync/sync_remote.dart';
 import 'package:noote/data/sync/sync_service.dart';
 import 'package:noote/features/note_editor/folder_import/folder_import.dart';
-import 'package:noote/features/note_editor/insert_images.dart';
+import 'package:noote/data/models/note.dart';
+import 'package:noote/features/note_editor/insert_attachments.dart';
+import 'package:noote/features/note_editor/markdown_convert.dart';
 import 'package:path/path.dart' as p;
 
 import 'support/fake_attachments.dart';
@@ -223,7 +226,10 @@ void main() {
 
     test('an empty line is replaced by the images', () async {
       editorState.selection = Selection.collapsed(Position(path: [1]));
-      await insertImageNodes(editorState, ['attachment://a', 'attachment://b']);
+      await insertBlocks(editorState, [
+        imageNode(url: 'attachment://a'),
+        imageNode(url: 'attachment://b'),
+      ]);
 
       expect(types(), ['paragraph', 'image', 'image', 'paragraph']);
       expect(editorState.selection!.end.path, [3]);
@@ -233,13 +239,89 @@ void main() {
       editorState.selection = Selection.collapsed(
         Position(path: [0], offset: 5),
       );
-      await insertImages(store, editorState, [
+      await insertFiles(store, editorState, [
         (bytes: png(4, 4), name: 'x.png'),
       ]);
 
       expect(types(), ['paragraph', 'image', 'paragraph']);
       final url = editorState.document.root.children[1].attributes['url'];
       expect(isAttachmentRef(url), isTrue);
+    });
+
+    test('other files go in as file blocks with their name and size', () async {
+      editorState.selection = Selection.collapsed(Position(path: [1]));
+      final pdf = Uint8List.fromList('%PDF-1.4 test'.codeUnits);
+      await insertFiles(store, editorState, [
+        (bytes: pdf, name: 'Emergency Kit.pdf'),
+        (bytes: png(3, 3), name: 'Pasted image'), // no name: recognised
+      ]);
+
+      expect(types(), ['paragraph', 'file', 'image', 'paragraph']);
+      final file = editorState.document.root.children[1].attributes;
+      expect(file[FileBlockKeys.name], 'Emergency Kit.pdf');
+      expect(file[FileBlockKeys.size], pdf.length);
+      final id = attachmentIdOf(file[FileBlockKeys.url])!;
+      expect(id, endsWith('.pdf'));
+      expect((await db.attachmentsDao.byId(id))!.mimeType, 'application/pdf');
+    });
+  });
+
+  group('files', () {
+    test('the type comes from the name, or else from the first bytes', () {
+      expect(fileExtensionFor('Kit.PDF', const []), 'pdf');
+      expect(fileExtensionFor('photo.jpeg', const []), 'jpg');
+      final recording = [0, 0, 0, 0x18, ...'ftypM4A '.codeUnits];
+      expect(fileExtensionFor('New Recording', recording), 'm4a');
+      expect(fileExtensionFor('Scan', '%PDF-1.7'.codeUnits), 'pdf');
+      expect(fileExtensionFor('mystery', const [1, 2, 3]), 'bin');
+      expect(formatFileSize(1536), '1.5 KB');
+      expect(formatFileSize(12 * 1024 * 1024), '12 MB');
+    });
+
+    test('files are stored as they are, never scaled', () async {
+      final bytes = Uint8List.fromList(List.filled(5000, 7));
+      final ref = await store.addFile(bytes, fileName: 'data.bin');
+      expect(fileOf(ref).readAsBytesSync(), bytes);
+      expect(
+        attachmentIdsIn({
+          'document': {
+            'type': 'page',
+            'children': [
+              {
+                'type': 'file',
+                'data': {'url': ref, 'name': 'data.bin', 'size': 5000},
+              },
+            ],
+          },
+        }),
+        {idOf(ref)},
+      );
+    });
+
+    test('a note exports its files as links, and is found by them', () {
+      final document = Document.blank()
+        ..insert(
+          [0],
+          [
+            paragraphNode(text: 'Keep this safe:'),
+            fileNode(url: 'attachment://x.pdf', name: 'Kit.pdf', size: 10),
+          ],
+        );
+      expect(
+        noteDocumentToMarkdown(document),
+        'Keep this safe:\n[Kit.pdf](attachment://x.pdf)',
+      );
+
+      final note = Note(
+        id: 'n',
+        title: 'Passwords',
+        titleStyle: const [],
+        body: document.toJson(),
+        tagIds: const [],
+        collaboratorInitials: const [],
+        updatedAt: DateTime(2026),
+      );
+      expect(note.bodyPlainText, contains('Kit.pdf'));
     });
   });
 
@@ -276,5 +358,52 @@ void main() {
     expect(urls[1], 'https://example.com/x.png');
     expect(urls[2], '_attachments/missing.png');
     expect(fileOf(urls[0] as String).existsSync(), isTrue);
+  });
+
+  test('Import Folder turns linked files into file blocks', () async {
+    final root = await Directory.systemTemp.createTemp('noote_import_files');
+    addTearDown(() => root.delete(recursive: true));
+    final folder = Directory(p.join(root.path, 'Pivotly'));
+    final files = Directory(p.join(folder.path, '_attachments', 'Logins'));
+    await files.create(recursive: true);
+    final pdf = '%PDF-1.4 kit'.codeUnits;
+    File(p.join(files.path, '1-Emergency Kit.pdf')).writeAsBytesSync(pdf);
+    File(p.join(folder.path, 'Other.md')).writeAsStringSync('Other note');
+    File(p.join(folder.path, 'Logins.md')).writeAsStringSync(
+      'Accounts\n\n'
+      '## Attachments\n\n'
+      '[Emergency Kit.pdf](_attachments/Logins/1-Emergency%20Kit.pdf)\n\n'
+      'See [the kit](_attachments/Logins/1-Emergency%20Kit.pdf) inline.\n\n'
+      '[Other](Other.md)\n\n'
+      '[Gone.pdf](_attachments/Logins/gone.pdf)\n',
+    );
+
+    await importMarkdownDirectory(
+      folder.path,
+      db: db,
+      folders: FoldersRepository(db, ownerId: () => 'u'),
+      notes: NotesRepository(db, ownerId: () => 'u'),
+      attachments: store,
+    );
+
+    final note = await (db.select(
+      db.notesTable,
+    )..where((n) => n.title.equals('Logins'))).getSingle();
+    final blocks = note.bodyJson['document']['children'] as List;
+    final fileBlocks = [
+      for (final b in blocks)
+        if (b['type'] == 'file') b['data'] as Map,
+    ];
+    expect(fileBlocks, hasLength(1));
+    expect(fileBlocks.single['name'], 'Emergency Kit.pdf');
+    expect(fileBlocks.single['size'], pdf.length);
+    final ref = fileBlocks.single['url'] as String;
+    expect(fileOf(ref).readAsBytesSync(), pdf);
+    // An inline mention, a link to another note and a missing file stay
+    // links.
+    final text = jsonEncode(blocks);
+    expect(text, contains('the kit'));
+    expect(text, contains('Other.md'));
+    expect(text, contains('gone.pdf'));
   });
 }

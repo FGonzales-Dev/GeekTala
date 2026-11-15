@@ -92,6 +92,31 @@ class AttachmentStore {
   Future<String> addImageFile(String path) async =>
       addImage(await File(path).readAsBytes(), fileName: p.basename(path));
 
+  /// Adds any file as-is (no scaling) and returns its `attachment://`
+  /// reference. Throws [AttachmentTooLargeException] past
+  /// [maxAttachmentBytes].
+  Future<String> addFile(Uint8List bytes, {required String fileName}) async {
+    if (bytes.length > maxAttachmentBytes) {
+      throw AttachmentTooLargeException(fileName);
+    }
+    final extension = fileExtensionFor(fileName, bytes);
+    final id = '${_uuid.v4()}.$extension';
+    await (await _file(id)).writeAsBytes(bytes, flush: true);
+    await _db.attachmentsDao.upsert(
+      AttachmentsTableCompanion.insert(
+        id: id,
+        originalName: Value(fileName),
+        mimeType: mimeTypeFor(extension),
+        byteSize: bytes.length,
+        createdAt: DateTime.now(),
+      ),
+    );
+    return attachmentRef(id);
+  }
+
+  Future<String> addFileFromPath(String path) async =>
+      addFile(await File(path).readAsBytes(), fileName: p.basename(path));
+
   /// [ensureLocal]'s file path (what the image block shows).
   Future<String?> ensureLocalPath(String id) async =>
       (await ensureLocal(id))?.path;
