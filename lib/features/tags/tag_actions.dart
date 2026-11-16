@@ -38,9 +38,11 @@ Future<void> showTagActionsMenu(
     case 'rename':
       final name = await showFolderNameDialog(
         context,
-        title: 'Rename tag',
+        title: 'Rename #${tag.name}',
         initialName: tag.name,
         confirmLabel: 'Rename',
+        hintText: 'Tag name',
+        icon: Icons.sell_outlined,
       );
       if (name == null) return;
       try {

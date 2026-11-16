@@ -123,71 +123,88 @@ class FolderTreeNode extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     Offset position,
-  ) async {
-    final repository = ref.read(foldersRepositoryProvider);
-    // Personal and Shared can't be deleted, and only move within the top
-    // level (by dragging), so "Move to…" would have nowhere to offer.
-    final protected = repository.isProtected(folder.id);
+  ) => showFolderActionsMenu(context, ref, folder, position);
+}
 
-    final selected = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        position.dx,
-        position.dy,
-        position.dx,
-        position.dy,
-      ),
-      items: [
-        const PopupMenuItem(value: 'new_subfolder', child: Text('New subfolder')),
-        const PopupMenuItem(value: 'rename', child: Text('Rename')),
-        if (!protected) const PopupMenuItem(value: 'move', child: Text('Move to…')),
-        if (!protected) const PopupMenuItem(value: 'delete', child: Text('Delete')),
-      ],
-    );
-    if (!context.mounted || selected == null) return;
+/// The folder actions: "New subfolder", "Rename", "Move to…", "Delete" —
+/// the last two not for Personal and Shared, which can't be deleted and
+/// only move within the top level (by dragging).
+List<PopupMenuEntry<String>> folderActionItems(Folder folder) {
+  final protected = FolderTree.isProtected(folder.id);
+  return [
+    const PopupMenuItem(value: 'new_subfolder', child: Text('New subfolder')),
+    const PopupMenuItem(value: 'rename', child: Text('Rename')),
+    if (!protected) const PopupMenuItem(value: 'move', child: Text('Move to…')),
+    if (!protected) const PopupMenuItem(value: 'delete', child: Text('Delete')),
+  ];
+}
 
-    switch (selected) {
-      case 'new_subfolder':
-        final name = await showFolderNameDialog(
-          context,
-          title: 'New subfolder',
-          confirmLabel: 'Create',
-        );
-        if (name != null) {
-          await repository.createFolder(name: name, parentId: folder.id);
-        }
-      case 'rename':
-        final name = await showFolderNameDialog(
-          context,
-          title: 'Rename folder',
-          initialName: folder.name,
-          confirmLabel: 'Rename',
-        );
-        if (name != null) await repository.renameFolder(folder.id, name);
-      case 'move':
-        final tree = ref.read(folderTreeProvider);
-        final target = await showMoveToFolderPicker(
-          context,
-          title: 'Move "${folder.name}"',
-          tree: tree,
-          offerTopLevel: true,
-          // Not where it already is.
-          isAllowed: (id) =>
-              tree.canMove(folder.id, into: id) &&
-              tree.parentOf(folder.id) != id,
-        );
-        if (target != null && context.mounted) {
-          await moveFolderTo(context, ref, folder.id, parentId: target.folderId);
-        }
-      case 'delete':
-        await showDeleteFolderDialog(
-          context,
-          ref,
-          folderId: folder.id,
-          folderName: folder.name,
-        );
-    }
+/// The right-click / long-press menu of [folderActionItems] at [position].
+Future<void> showFolderActionsMenu(
+  BuildContext context,
+  WidgetRef ref,
+  Folder folder,
+  Offset position,
+) async {
+  final selected = await showMenu<String>(
+    context: context,
+    position: RelativeRect.fromLTRB(
+      position.dx,
+      position.dy,
+      position.dx,
+      position.dy,
+    ),
+    items: folderActionItems(folder),
+  );
+  if (!context.mounted || selected == null) return;
+  await runFolderAction(context, ref, folder, selected);
+}
+
+/// Runs one of [folderActionItems]. Returns whether the folder was deleted.
+Future<bool> runFolderAction(
+  BuildContext context,
+  WidgetRef ref,
+  Folder folder,
+  String action,
+) async {
+  final repository = ref.read(foldersRepositoryProvider);
+  switch (action) {
+    case 'new_subfolder':
+      await createFolderFlow(context, ref, parentId: folder.id);
+    case 'rename':
+      final name = await showFolderNameDialog(
+        context,
+        title: 'Rename “${folder.name}”',
+        initialName: folder.name,
+        confirmLabel: 'Rename',
+        hintText: 'Folder name',
+      );
+      if (name != null) await repository.renameFolder(folder.id, name);
+    case 'move':
+      final tree = ref.read(folderTreeProvider);
+      final target = await showMoveToFolderPicker(
+        context,
+        title: 'Move “${folder.name}”',
+        tree: tree,
+        offerTopLevel: true,
+        current: (folderId: tree.parentOf(folder.id)),
+        // Not where it already is.
+        isAllowed: (id) =>
+            tree.canMove(folder.id, into: id) &&
+            tree.parentOf(folder.id) != id,
+      );
+      if (target != null && context.mounted) {
+        await moveFolderTo(context, ref, folder.id, parentId: target.folderId);
+      }
+    case 'delete':
+      return showDeleteFolderDialog(
+        context,
+        ref,
+        folderId: folder.id,
+        folderName: folder.name,
+      );
   }
+  return false;
 }
 
 /// Where on a folder row something is dropped. A folder can go above or

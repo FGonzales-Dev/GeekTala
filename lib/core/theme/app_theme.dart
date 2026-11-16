@@ -90,13 +90,32 @@ abstract final class AppTheme {
           side: BorderSide(color: colorScheme.outline),
         ),
       ),
+      // No grey fill anywhere: a plain background with a thin outline that
+      // darkens on focus. Fields that set `border: InputBorder.none` (the
+      // note title, search) get no outline at all.
       inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: nooteColors.surfaceAlt,
+        filled: false,
+        isDense: true,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+        hintStyle: TextStyle(color: nooteColors.textFaint),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.small),
+          borderRadius: BorderRadius.circular(AppRadius.small + 2),
           borderSide: BorderSide(color: colorScheme.outline),
         ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.small + 2),
+          borderSide: BorderSide(color: colorScheme.outline),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.small + 2),
+          borderSide: BorderSide(color: colorScheme.onSurfaceVariant),
+        ),
+      ),
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: colorScheme.onSurface,
+        selectionColor: colorScheme.onSurfaceVariant.withValues(alpha: 0.25),
+        selectionHandleColor: colorScheme.onSurface,
       ),
       iconTheme: IconThemeData(color: colorScheme.onSurfaceVariant, size: 18),
     );

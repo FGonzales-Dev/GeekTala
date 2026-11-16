@@ -9,9 +9,20 @@ import 'app_icon.dart';
 /// `.sidebar-search` / `.m-search` — filters notes by title and body text
 /// (see [searchQueryProvider] / `searchNotes`).
 class SearchField extends ConsumerStatefulWidget {
-  const SearchField({super.key, required this.hint});
+  const SearchField({
+    super.key,
+    required this.hint,
+    this.query,
+    this.large = false,
+  });
 
   final String hint;
+
+  /// Where the text goes; the shared [searchQueryProvider] by default.
+  final NotifierProvider<SearchQuery, String>? query;
+
+  /// Phone size: taller, with bigger text.
+  final bool large;
 
   @override
   ConsumerState<SearchField> createState() => _SearchFieldState();
@@ -20,10 +31,13 @@ class SearchField extends ConsumerStatefulWidget {
 class _SearchFieldState extends ConsumerState<SearchField> {
   late final TextEditingController _controller;
 
+  NotifierProvider<SearchQuery, String> get _query =>
+      widget.query ?? searchQueryProvider;
+
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: ref.read(searchQueryProvider));
+    _controller = TextEditingController(text: ref.read(_query));
   }
 
   @override
@@ -34,34 +48,42 @@ class _SearchFieldState extends ConsumerState<SearchField> {
 
   void _clear() {
     _controller.clear();
-    ref.read(searchQueryProvider.notifier).set('');
+    ref.read(_query.notifier).set('');
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = context.nooteColors;
-    final hasQuery = ref.watch(searchQueryProvider).isNotEmpty;
+    final hasQuery = ref.watch(_query).isNotEmpty;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      padding: widget.large
+          ? const EdgeInsets.symmetric(horizontal: 11, vertical: 9)
+          : const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      // Transparent: no grey or white band, just the outline.
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
         border: Border.all(color: theme.colorScheme.outline),
-        borderRadius: BorderRadius.circular(AppRadius.small + 1),
+        borderRadius: BorderRadius.circular(
+          widget.large ? AppRadius.normal : AppRadius.small + 1,
+        ),
       ),
       child: Row(
         children: [
-          AppIcon(AppIconName.search, size: 13, color: colors.textFaint),
-          const SizedBox(width: 7),
+          AppIcon(
+            AppIconName.search,
+            size: widget.large ? 16 : 13,
+            color: colors.textFaint,
+          ),
+          SizedBox(width: widget.large ? 9 : 7),
           Expanded(
             child: TextField(
               controller: _controller,
               onChanged: (value) =>
-                  ref.read(searchQueryProvider.notifier).set(value),
+                  ref.read(_query.notifier).set(value),
               style: TextStyle(
                 fontFamily: 'Inter',
-                fontSize: 12,
+                fontSize: widget.large ? 15 : 12,
                 color: theme.colorScheme.onSurface,
               ),
               decoration: InputDecoration(
@@ -71,7 +93,7 @@ class _SearchFieldState extends ConsumerState<SearchField> {
                 hintText: widget.hint,
                 hintStyle: TextStyle(
                   fontFamily: 'Inter',
-                  fontSize: 12,
+                  fontSize: widget.large ? 15 : 12,
                   color: colors.textFaint,
                 ),
               ),

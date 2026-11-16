@@ -198,10 +198,11 @@ void main() {
     });
 
     test('another account signing in clears this one\'s files', () async {
-      final ref = await store.addImage(png(2, 2), fileName: 'mine.png');
       final sync = SyncService(db, NullSyncRemote(), attachments: store);
-
       await sync.adoptAccount('user-a');
+      final ref = await store.addImage(png(2, 2), fileName: 'mine.png');
+
+      expect(await sync.adoptAccount('user-a'), isFalse);
       expect(fileOf(ref).existsSync(), isTrue);
       await sync.adoptAccount('user-b');
       expect(fileOf(ref).existsSync(), isFalse);

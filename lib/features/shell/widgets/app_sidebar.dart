@@ -16,7 +16,6 @@ import '../../folders/drag_data.dart';
 import '../../folders/folder_actions.dart';
 import '../../folders/widgets/delete_folder_dialog.dart';
 import '../../folders/widgets/folder_disclosure.dart';
-import '../../folders/widgets/folder_name_dialog.dart';
 import '../../folders/widgets/folder_tree_node.dart';
 import '../../settings/widgets/settings_dialog.dart';
 import '../../tags/tag_actions.dart';
@@ -85,67 +84,56 @@ class AppSidebar extends ConsumerWidget {
                         children: [
                           _SectionLabel('Folders'),
                           _AddFolderButton(
-                            onPressed: () async {
-                              final name = await showFolderNameDialog(
-                                context,
-                                title: 'New folder',
-                                confirmLabel: 'Create',
-                              );
-                              if (name != null) {
-                                await ref
-                                    .read(foldersRepositoryProvider)
-                                    .createFolder(name: name);
-                              }
-                            },
+                            onPressed: () => createFolderFlow(context, ref),
                           ),
                         ],
                       ),
                     ),
                     for (final folder in tree.roots)
-                      FolderTreeNode(
-                        key: ValueKey(folder.id),
-                        folder: folder,
-                        tree: tree,
-                        dragAndDrop: true,
-                        depth: 0,
-                        noteCounts: noteCounts,
-                        selectedFolderId: selectedFolderId,
-                        onSelect: (id) {
-                          ref.read(selectedFolderIdProvider.notifier).select(id);
-                          ref.read(selectedTagIdProvider.notifier).clear();
-                          ref.read(isViewingTrashProvider.notifier).exit();
-                        },
-                        rowBuilder: (
-                          context, {
-                          required folder,
-                          required depth,
-                          required selected,
-                          required noteCount,
-                          required onTap,
-                          expanded,
-                          onToggle,
-                        }) {
-                          return _NavItem(
-                            icon: AppIconName.folder,
-                            label: folder.name,
-                            trailing: '$noteCount',
-                            selected: selected,
-                            depth: depth,
-                            onTap: onTap,
-                            leading: FolderDisclosure(
-                              expanded: expanded,
-                              onToggle: onToggle,
-                              size: 12,
-                              color: context.nooteColors.textFaint,
-                            ),
-                          );
-                        },
-                      ),
-                    _NavItem(
-                      icon: AppIconName.people,
-                      label: 'Shared with me',
-                      trailing: '3',
-                    ),
+                      if (!tree.isHiddenShared(
+                        folder.id,
+                        noteCount: noteCounts[folder.id] ?? 0,
+                      ))
+                        FolderTreeNode(
+                          key: ValueKey(folder.id),
+                          folder: folder,
+                          tree: tree,
+                          dragAndDrop: true,
+                          depth: 0,
+                          noteCounts: noteCounts,
+                          selectedFolderId: selectedFolderId,
+                          onSelect: (id) {
+                            ref.read(selectedFolderIdProvider.notifier).select(id);
+                            ref.read(selectedTagIdProvider.notifier).clear();
+                            ref.read(isViewingTrashProvider.notifier).exit();
+                          },
+                          rowBuilder: (
+                            context, {
+                            required folder,
+                            required depth,
+                            required selected,
+                            required noteCount,
+                            required onTap,
+                            expanded,
+                            onToggle,
+                          }) {
+                            return _NavItem(
+                              icon: AppIconName.folder,
+                              label: folder.name,
+                              trailing: '$noteCount',
+                              selected: selected,
+                              depth: depth,
+                              onTap: onTap,
+                              leading: FolderDisclosure(
+                                expanded: expanded,
+                                onToggle: onToggle,
+                                size: 12,
+                                color: context.nooteColors.textFaint,
+                              ),
+                            );
+                          },
+                        ),
+                    // "Shared with me" comes back when sharing is built.
                     const SizedBox(height: 6),
                     _SectionLabel('Tags'),
                     for (final tag in tags)
@@ -223,10 +211,7 @@ class AppSidebar extends ConsumerWidget {
                 const Expanded(child: SyncStatusIndicator()),
                 InkWell(
                   borderRadius: BorderRadius.circular(20),
-                  onTap: () => showDialog<void>(
-                    context: context,
-                    builder: (_) => const SettingsDialog(),
-                  ),
+                  onTap: () => showSettingsWindow(context),
                   child: Padding(
                     padding: const EdgeInsets.all(4),
                     child: Icon(

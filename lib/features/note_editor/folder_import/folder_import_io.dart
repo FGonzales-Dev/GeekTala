@@ -14,6 +14,61 @@ const canImportFolders = true;
 
 const _extensions = {'.md', '.markdown', '.txt'};
 
+/// What importing [path] would do, worked out before asking: how many
+/// notes it holds ([FolderImportPreview.total]), and how many of them are
+/// already there — same folder path from the top-level folder named after
+/// it, same title — which "add only what's missing" would skip.
+Future<FolderImportPreview> previewMarkdownDirectory(
+  String path, {
+  required AppDatabase db,
+}) async {
+  final root = Directory(path);
+  final name = p.basename(p.normalize(path));
+  final existingFolders = await db.foldersDao.getAllFoldersOnce();
+  String? existingFolder(String? parentId, String name) {
+    for (final f in existingFolders) {
+      if (f.parentId == parentId && f.name == name) return f.id;
+    }
+    return null;
+  }
+
+  final titlesByFolder = <String?, Set<String>>{};
+  final rows = await (db.select(
+    db.notesTable,
+  )..where((n) => n.isDeleted.equals(false))).get();
+  for (final row in rows) {
+    (titlesByFolder[row.folderId] ??= {}).add(row.title);
+  }
+
+  var total = 0;
+  var existing = 0;
+  // [folderId] null: a folder that doesn't exist yet, so nothing in it is
+  // there already (but titles still repeat within it).
+  Future<void> walk(Directory dir, String? folderId, Set<String> seen) async {
+    for (final entry in await dir.list(followLinks: false).toList()) {
+      final base = p.basename(entry.path);
+      if (base.startsWith('.')) continue;
+      if (entry is Directory) {
+        if (!await _worthImporting(entry)) continue;
+        final id = folderId == null ? null : existingFolder(folderId, base);
+        await walk(entry, id, id == null ? {} : (titlesByFolder[id] ?? {}).toSet());
+      } else if (entry is File &&
+          _extensions.contains(p.extension(base).toLowerCase())) {
+        total++;
+        if (!seen.add(p.basenameWithoutExtension(base))) existing++;
+      }
+    }
+  }
+
+  final rootId = existingFolder(null, name);
+  await walk(
+    root,
+    rootId,
+    rootId == null ? {} : (titlesByFolder[rootId] ?? {}).toSet(),
+  );
+  return FolderImportPreview(total: total, existing: existing);
+}
+
 /// Imports a folder of Markdown files: a new Noote folder named after it,
 /// subfolders as subfolders, each `.md`/`.markdown`/`.txt` file as a note
 /// (title = file name, date = the file's modification time). All in one

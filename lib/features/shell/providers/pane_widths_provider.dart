@@ -27,6 +27,14 @@ class _PaneWidth extends Notifier<double> {
   }
 
   void save() => ref.read(writeDeviceSettingProvider)(_key, '$state');
+
+  /// Back to the width the app starts with (Settings → Pane widths).
+  void reset() {
+    state = _initial;
+    save();
+  }
+
+  bool get isDefault => state == _initial;
 }
 
 final sidebarWidthProvider = NotifierProvider<_PaneWidth, double>(

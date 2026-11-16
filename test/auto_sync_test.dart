@@ -99,11 +99,13 @@ void main() {
   test('on open: uploads what is waiting, then downloads', () async {
     container.listen(syncCoordinatorProvider, (_, _) {});
 
+    // A new device and an empty account: the demo content is downloaded
+    // as the starting point, then uploaded.
     await waitUntil(
       () async =>
-          await db.syncDao.readState(SyncDao.lastDownloadedAtKey) != null,
+          await db.syncDao.readState(SyncDao.lastDownloadedAtKey) != null &&
+          await pending() == 0,
     );
-    expect(await pending(), 0);
     expect(server.tables['notes'], hasLength(6));
     // The round trip kept everything.
     expect(await db.select(db.notesTable).get(), hasLength(6));

@@ -13,6 +13,12 @@ abstract final class FileBlockKeys {
 
   /// In bytes.
   static const size = 'size';
+
+  /// How a PDF is shown: its first page ([viewPreview], the default) or
+  /// just the name card ([viewCard]) — like Apple Notes' "View As".
+  static const view = 'view';
+  static const viewPreview = 'preview';
+  static const viewCard = 'card';
 }
 
 String attachmentRef(String id) => '$attachmentScheme$id';

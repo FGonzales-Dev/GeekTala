@@ -7,6 +7,13 @@ import 'folder_import_result.dart';
 /// Web: there's no file system to walk.
 const canImportFolders = false;
 
+Future<FolderImportPreview> previewMarkdownDirectory(
+  String path, {
+  required AppDatabase db,
+}) {
+  throw UnsupportedError('Importing a folder needs a file system.');
+}
+
 Future<FolderImportResult> importMarkdownDirectory(
   String path, {
   required AppDatabase db,

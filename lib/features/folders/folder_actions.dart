@@ -6,6 +6,7 @@ import '../../core/widgets/undo_snack_bar.dart';
 import '../../data/providers/folders_providers.dart';
 import '../../data/providers/notes_providers.dart';
 import 'collapsed_folders_provider.dart';
+import 'widgets/folder_name_dialog.dart';
 
 // Moves and deletes shared by drag and drop and the "Move to…"/"Delete"
 // menus, each followed by an Undo snack bar. The messenger and router are
@@ -13,6 +14,29 @@ import 'collapsed_folders_provider.dart';
 // gone by the time it finishes (a moved folder's row is rebuilt elsewhere).
 
 String _notes(int n) => n == 1 ? 'note' : '$n notes';
+
+/// "New folder": asks for a name and where it goes ([parentId] to start
+/// with), creates it, and opens its parent so it shows. Returns the new
+/// folder's id, or null if cancelled.
+Future<String?> createFolderFlow(
+  BuildContext context,
+  WidgetRef ref, {
+  String? parentId,
+}) async {
+  final created = await showNewFolderDialog(
+    context,
+    tree: ref.read(folderTreeProvider),
+    parentId: parentId,
+  );
+  if (created == null) return null;
+  final id = await ref
+      .read(foldersRepositoryProvider)
+      .createFolder(name: created.name, parentId: created.parentId);
+  if (created.parentId case final parent?) {
+    ref.read(collapsedFoldersProvider.notifier).expand(parent);
+  }
+  return id;
+}
 
 Future<void> moveNotesTo(
   BuildContext context,
@@ -71,7 +95,7 @@ Future<void> moveFolderTo(
 }
 
 /// Moves notes to Recently Deleted. If the open note is one of them, the
-/// editor is closed.
+/// editor is closed (on a phone: back to the screen it was opened from).
 Future<void> trashNotes(
   BuildContext context,
   WidgetRef ref,
@@ -83,7 +107,13 @@ Future<void> trashNotes(
   final repository = ref.read(notesRepositoryProvider);
 
   await repository.deleteNotes(noteIds);
-  if (openNoteId != null && noteIds.contains(openNoteId)) router!.go('/');
+  if (openNoteId != null && noteIds.contains(openNoteId)) {
+    if (router!.canPop()) {
+      router.pop();
+    } else {
+      router.go('/');
+    }
+  }
   if (messenger == null) return;
   final n = noteIds.length;
   showUndoSnackBar(

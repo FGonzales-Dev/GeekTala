@@ -10,6 +10,7 @@ abstract final class DeviceSettingKeys {
   static const pasteMarkdown = 'pref.paste_markdown';
   static const autoSync = 'pref.auto_sync';
   static const collapsedFolders = 'pref.collapsed_folders';
+  static const pdfView = 'pref.pdf_view';
 }
 
 /// Small preferences for this device (theme, pane widths, …), kept in the
@@ -20,6 +21,15 @@ abstract final class DeviceSettingKeys {
 /// so unrelated writes (sync records its times here) don't rebuild you.
 final deviceSettingsProvider = StreamProvider<Map<String, String>>((ref) {
   return ref.watch(appDatabaseProvider).syncDao.watchState();
+});
+
+/// Settings → "PDFs in notes": whether a PDF shows its first page (the
+/// default) or just its name card, unless that PDF was switched itself.
+final pdfPreviewByDefaultProvider = Provider<bool>((ref) {
+  return ref.watch(
+        deviceSettingsProvider.select((s) => s.value?[DeviceSettingKeys.pdfView]),
+      ) !=
+      'card';
 });
 
 /// Saves a [deviceSettingsProvider] value.

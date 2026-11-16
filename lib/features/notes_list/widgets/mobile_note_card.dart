@@ -3,9 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../../core/widgets/avatar_stack.dart';
-import '../../../core/widgets/tag_chip.dart';
 import '../../../data/models/note.dart';
 import '../../../data/models/note_search.dart';
 import '../../../data/models/tag.dart';
@@ -16,7 +13,8 @@ import '../../../core/utils/search_highlight.dart';
 import '../../folders/folder_actions.dart';
 import '../../folders/widgets/move_to_folder_picker.dart';
 
-/// `.m-note-card`. Long-press opens "Move to… / Delete". Delete is a soft
+/// A note in a phone list (a row in a `MobileGroup`): title, then date and
+/// the first line. Long-press opens "Move to… / Delete". Delete is a soft
 /// delete with Undo, so no confirmation; it lands in Recently Deleted.
 class MobileNoteCard extends ConsumerWidget {
   const MobileNoteCard({
@@ -57,8 +55,9 @@ class MobileNoteCard extends ConsumerWidget {
       case 'move':
         final target = await showMoveToFolderPicker(
           context,
-          title: 'Move "${note.title.trim().isEmpty ? 'Untitled' : note.title}"',
+          title: 'Move “${note.title.trim().isEmpty ? 'Untitled' : note.title}”',
           tree: ref.read(folderTreeProvider),
+          current: (folderId: note.folderId),
           isAllowed: (id) => id != null && id != note.folderId,
         );
         if (target?.folderId case final folderId? when context.mounted) {
@@ -73,91 +72,67 @@ class MobileNoteCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colors = context.nooteColors;
+    final snippet = searchTerms.isEmpty
+        ? null
+        : searchSnippet(note.bodyPlainText, searchTerms);
 
     return GestureDetector(
       onLongPressStart: (details) =>
           _showMenu(context, ref, details.globalPosition),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(11),
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 9),
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            border: Border.all(color: colors.borderSoft),
-            borderRadius: BorderRadius.circular(AppRadius.normal + 1),
-          ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text.rich(
-                      TextSpan(
-                        children: highlightMatches(
-                          buildStyledTitleSpans(
-                            note.title,
-                            note.titleStyle,
-                            AppTextStyles.noteTitle.copyWith(
-                              fontSize: 13,
-                              color: theme.colorScheme.onSurface,
-                            ),
-                          ),
-                          searchTerms,
-                        ),
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    formatRelativeTime(note.updatedAt, DateTime.now()),
-                    style: AppTextStyles.noteTime.copyWith(
-                      color: colors.textFaint,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 3),
               Text.rich(
                 TextSpan(
-                  children: highlightMatches([
-                    TextSpan(
-                      // While searching: the part of the note that matched.
-                      text: (searchTerms.isEmpty
-                              ? null
-                              : searchSnippet(note.bodyPlainText, searchTerms)) ??
-                          note.previewText,
-                      style: AppTextStyles.notePreview.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
+                  children: highlightMatches(
+                    buildStyledTitleSpans(
+                      note.title.trim().isEmpty ? 'New Note' : note.title,
+                      note.titleStyle,
+                      AppTextStyles.noteTitle.copyWith(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface,
                       ),
                     ),
-                  ], searchTerms),
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (note.tagIds.isNotEmpty || note.collaboratorInitials.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Row(
-                    children: [
-                      for (final tagId in note.tagIds)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: TagChip(label: tagsById[tagId]?.name ?? tagId),
-                        ),
-                      const Spacer(),
-                      if (note.collaboratorInitials.isNotEmpty)
-                        AvatarStack(
-                          initials: note.collaboratorInitials,
-                          size: 16,
-                        ),
-                    ],
+                    searchTerms,
                   ),
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: '${formatNoteDate(note.updatedAt, DateTime.now())}  ',
+                      style: AppTextStyles.notePreview.copyWith(
+                        fontSize: 13,
+                        color: colors.textFaint,
+                      ),
+                    ),
+                    ...highlightMatches([
+                      TextSpan(
+                        // While searching: the part of the note that matched.
+                        text: snippet ??
+                            (note.previewText.isEmpty
+                                ? 'No additional text'
+                                : note.previewText),
+                        style: AppTextStyles.notePreview.copyWith(
+                          fontSize: 13,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ], searchTerms),
+                  ],
+                ),
+                maxLines: snippet == null ? 1 : 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ],
           ),
         ),

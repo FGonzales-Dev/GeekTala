@@ -9,6 +9,7 @@ import 'package:pasteboard/pasteboard.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/utils/is_phone.dart';
 import '../../../data/providers/notes_providers.dart';
 import '../../../data/providers/sync_provider.dart';
 import '../../../data/sync/pending_writes.dart';
@@ -426,10 +427,41 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
     }
 
     if (!widget.desktop) {
-      // This toolbar lives under appflowy_editor's toolbar/desktop/ —
-      // mobile gets its own selection handles/menu from the platform text
-      // input, not this widget.
-      return editor;
+      // The bar above a phone's keyboard: text styles, headings, checklist,
+      // list, code, attach, and (built in) a button to close the keyboard.
+      // It sits in the app's overlay and listens for the keyboard through a
+      // plugin, so only on a real phone.
+      if (!runningOnPhone) return editor;
+      return MobileToolbarV2(
+        editorState: editorState,
+        toolbarHeight: 46,
+        backgroundColor: theme.scaffoldBackgroundColor,
+        foregroundColor: theme.colorScheme.onSurfaceVariant,
+        iconColor: theme.colorScheme.onSurface,
+        itemHighlightColor: theme.colorScheme.onSurface,
+        itemOutlineColor: colors.borderSoft,
+        outlineColor: theme.colorScheme.outline,
+        tabBarSelectedBackgroundColor: colors.activeBg,
+        tabBarSelectedForegroundColor: theme.colorScheme.onSurface,
+        primaryColor: theme.colorScheme.onSurface,
+        onPrimaryColor: theme.scaffoldBackgroundColor,
+        toolbarItems: [
+          textDecorationMobileToolbarItemV2,
+          headingMobileToolbarItem,
+          todoListMobileToolbarItem,
+          listMobileToolbarItem,
+          codeMobileToolbarItem,
+          quoteMobileToolbarItem,
+          if (attachmentsSupported)
+            MobileToolbarItem.action(
+              itemIconBuilder: (_, _, _) =>
+                  const Icon(Icons.attach_file, size: 22),
+              actionHandler: (_, editorState) =>
+                  pickAndInsertFiles(context, ref, editorState),
+            ),
+        ],
+        child: editor,
+      );
     }
 
     return Column(

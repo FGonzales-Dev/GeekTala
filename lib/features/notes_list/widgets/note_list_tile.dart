@@ -81,8 +81,11 @@ class NoteListTile extends ConsumerWidget {
       case 'move':
         final target = await showMoveToFolderPicker(
           context,
-          title: n == 1 ? 'Move "${_label(note)}"' : 'Move $n notes',
+          title: n == 1 ? 'Move “${_label(note)}”' : 'Move $n notes',
           tree: ref.read(folderTreeProvider),
+          current: notes.every((n) => n.folderId == notes.first.folderId)
+              ? (folderId: notes.first.folderId)
+              : null,
           // Not a folder they're all in already.
           isAllowed: (id) => id != null && notes.any((n) => n.folderId != id),
         );

@@ -31,6 +31,19 @@ class SyncDao extends DatabaseAccessor<AppDatabase> with _$SyncDaoMixin {
 
   Future<int> pendingCount() => _pendingCountQuery().getSingle();
 
+  /// What's waiting to upload, by server table (`'notes'`, `'folders'`,
+  /// `'tags'`, `'notes_tags'`) — for "2 changes aren't uploaded yet".
+  Future<Map<String, int>> pendingByEntity() async {
+    final count = syncOutbox.seq.count();
+    final rows = await (selectOnly(syncOutbox)
+          ..addColumns([syncOutbox.entity, count])
+          ..groupBy([syncOutbox.entity]))
+        .get();
+    return {
+      for (final row in rows) row.read(syncOutbox.entity)!: row.read(count) ?? 0,
+    };
+  }
+
   Future<List<SyncOutboxEntry>> outboxEntries() {
     return (select(
       syncOutbox,

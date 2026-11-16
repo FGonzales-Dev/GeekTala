@@ -13,3 +13,9 @@ class SearchQuery extends Notifier<String> {
 final searchQueryProvider = NotifierProvider<SearchQuery, String>(
   SearchQuery.new,
 );
+
+/// A phone screen's own search box ([scope], e.g. `'home'` or
+/// `'folder:<id>'`): what's typed there doesn't carry over to other
+/// screens, and it's cleared when the screen closes.
+final screenSearchQueryProvider = NotifierProvider.autoDispose
+    .family<SearchQuery, String, String>((scope) => SearchQuery());

@@ -5,8 +5,11 @@ import 'package:appflowy_editor/appflowy_editor.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:path/path.dart' as p;
+
+import '../../core/router/navigation.dart';
+import '../../core/utils/breakpoints.dart';
+import '../../core/widgets/noote_dialog.dart';
 
 import '../../data/models/note.dart';
 import '../../data/attachments/attachment_store.dart';
@@ -58,7 +61,7 @@ Future<void> importMarkdownNote(
         title: title,
         body: document.toJson(),
       );
-  if (context.mounted) context.go('/notes/$id');
+  if (context.mounted) openNote(context, id);
 }
 
 /// Picks a folder and imports every Markdown file in it, keeping its
@@ -75,51 +78,44 @@ Future<void> importMarkdownFolder(BuildContext context, WidgetRef ref) async {
   final navigator = Navigator.of(context, rootNavigator: true);
 
   final name = p.basename(p.normalize(path));
+  final db = ref.read(appDatabaseProvider);
   var addMissingOnly = false;
   if (ref.read(folderTreeProvider).roots.any((f) => f.name == name)) {
-    final choice = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Add to "$name"?'),
-        content: Text(
-          'You already have a folder named "$name". Add only the notes that '
-          'aren\'t in it yet, or import everything as a separate folder?\n\n'
-          'Notes already there (same folder and title) are left as they are.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Import as Separate Folder'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Add Missing Notes'),
-          ),
-        ],
+    final FolderImportPreview preview;
+    try {
+      preview = await previewMarkdownDirectory(path, db: db);
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Couldn\'t read that folder ($e).')),
+      );
+      return;
+    }
+    if (!context.mounted) return;
+    final choice = await showNooteDialog<bool>(
+      context,
+      builder: (context) => _ImportIntoExistingDialog(
+        name: name,
+        preview: preview,
       ),
     );
     if (choice == null || !context.mounted) return;
     addMissingOnly = choice;
   }
 
-  showDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => const AlertDialog(
-      content: Row(
-        children: [
-          SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-          SizedBox(width: 16),
-          Text('Importing notes…'),
-        ],
+  showNooteDialog<void>(
+    context,
+    dismissible: false,
+    builder: (_) => PopScope(
+      canPop: false,
+      child: NooteDialog(
+        icon: Icons.download_outlined,
+        title: 'Importing “$name”…',
+        subtitle: 'Notes, subfolders and attached files.',
+        autofocus: false,
+        body: const Padding(
+          padding: EdgeInsets.only(bottom: 14),
+          child: LinearProgressIndicator(minHeight: 3),
+        ),
       ),
     ),
   );
@@ -129,7 +125,7 @@ Future<void> importMarkdownFolder(BuildContext context, WidgetRef ref) async {
   try {
     result = await importMarkdownDirectory(
       path,
-      db: ref.read(appDatabaseProvider),
+      db: db,
       folders: ref.read(foldersRepositoryProvider),
       notes: ref.read(notesRepositoryProvider),
       attachments: attachmentsSupported
@@ -151,6 +147,9 @@ Future<void> importMarkdownFolder(BuildContext context, WidgetRef ref) async {
   ref.read(selectedFolderIdProvider.notifier).select(result.rootFolderId);
   ref.read(selectedTagIdProvider.notifier).clear();
   ref.read(isViewingTrashProvider.notifier).exit();
+  if (context.mounted && !isDesktop(context)) {
+    openFolder(context, result.rootFolderId);
+  }
   final n = result.notes;
   final failed = result.failedFiles.length;
   final notes = '$n ${n == 1 ? 'note' : 'notes'}';
@@ -168,6 +167,72 @@ Future<void> importMarkdownFolder(BuildContext context, WidgetRef ref) async {
       ),
     ),
   );
+}
+
+/// "Import “Apple Notes”": a folder with that name is already there. Pops
+/// `true` to add only the missing notes (preselected), `false` to import
+/// everything as a separate folder.
+class _ImportIntoExistingDialog extends StatefulWidget {
+  const _ImportIntoExistingDialog({required this.name, required this.preview});
+
+  final String name;
+  final FolderImportPreview preview;
+
+  @override
+  State<_ImportIntoExistingDialog> createState() =>
+      _ImportIntoExistingDialogState();
+}
+
+class _ImportIntoExistingDialogState extends State<_ImportIntoExistingDialog> {
+  var _addMissing = true;
+
+  static String _notes(int n) => '$n ${n == 1 ? 'note' : 'notes'}';
+
+  void _import() => Navigator.of(context).pop(_addMissing);
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = widget.preview;
+    final missing = preview.missing;
+    final there = preview.existing;
+    return NooteDialog(
+      icon: Icons.download_outlined,
+      title: 'Import “${widget.name}”',
+      subtitle: 'You already have a folder with this name.',
+      onSubmit: _addMissing && missing == 0 ? null : _import,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          NooteOptionCard(
+            selected: _addMissing,
+            recommended: true,
+            title: 'Add the missing notes',
+            description: missing == 0
+                ? 'Nothing to add: all ${_notes(there)} are already there.'
+                : '$missing new · $there already there and left as they are.',
+            onTap: () => setState(() => _addMissing = true),
+          ),
+          NooteOptionCard(
+            selected: !_addMissing,
+            title: 'Import everything as a new folder',
+            description:
+                'All ${_notes(preview.total)}, alongside the existing folder.',
+            onTap: () => setState(() => _addMissing = false),
+          ),
+        ],
+      ),
+      hint: KeyHint([const Kbd('↵'), ' to import']),
+      actions: [
+        NooteButton('Cancel', onPressed: () => Navigator.of(context).pop()),
+        NooteButton.primary(
+          _addMissing
+              ? (missing == 0 ? 'Nothing to add' : 'Add ${_notes(missing)}')
+              : 'Import ${_notes(preview.total)}',
+          onPressed: _addMissing && missing == 0 ? null : _import,
+        ),
+      ],
+    );
+  }
 }
 
 /// Converts the note's already-persisted body to markdown (via

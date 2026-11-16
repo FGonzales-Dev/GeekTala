@@ -320,18 +320,17 @@ class SyncService {
   // Accounts
   // ---------------------------------------------------------------------
 
-  /// Records which account the local data belongs to. The first account to
-  /// sign in on a device takes over what's there (the demo content). If a
-  /// *different* account signs in later, local data is cleared, including
-  /// anything not uploaded, and this returns true — the caller should then
-  /// run [downloadForNewAccount].
+  /// Records which account the local data belongs to. When an account signs
+  /// in that the local data doesn't belong to — including the first sign-in
+  /// on a new device, where all that's here is the demo content (nothing
+  /// can be written before signing in) — local data is cleared, including
+  /// anything not uploaded, and this returns true: the caller should then
+  /// run [downloadForNewAccount], which brings in the account's notes, or
+  /// the demo content if it has none yet. So a new device never merges its
+  /// demo notes into an account that already has notes.
   Future<bool> adoptAccount(String userId) async {
     final stored = await _dao.readState(SyncDao.userIdKey);
     if (stored == userId) return false;
-    if (stored == null) {
-      await _dao.writeState(SyncDao.userIdKey, userId);
-      return false;
-    }
     await _db.transaction(() async {
       await _dao.deleteAllData();
       await _dao.clearOutbox();

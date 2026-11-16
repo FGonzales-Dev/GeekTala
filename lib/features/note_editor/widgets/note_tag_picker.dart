@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/noote_dialog.dart';
 import '../../../core/widgets/tag_chip.dart';
+import '../../../data/models/tag.dart';
 import '../../../data/providers/notes_providers.dart';
 import '../../../data/providers/tags_providers.dart';
 import '../../tags/tag_actions.dart';
@@ -53,8 +55,8 @@ class _AddTagButton extends StatelessWidget {
     final colors = context.nooteColors;
     return InkWell(
       borderRadius: BorderRadius.circular(20),
-      onTap: () => showDialog<void>(
-        context: context,
+      onTap: () => showNooteDialog<void>(
+        context,
         builder: (_) => _TagPickerDialog(noteId: noteId),
       ),
       child: Container(
@@ -92,108 +94,228 @@ class _TagPickerDialog extends ConsumerStatefulWidget {
   ConsumerState<_TagPickerDialog> createState() => _TagPickerDialogState();
 }
 
+/// One field to search the tags or create a new one; tick a tag to put it
+/// on the note. Enter creates the typed tag (or ticks the one with that
+/// name); with nothing typed it closes.
 class _TagPickerDialogState extends ConsumerState<_TagPickerDialog> {
-  final _newTagController = TextEditingController();
+  final _query = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _query.addListener(() => setState(() {}));
+  }
 
   @override
   void dispose() {
-    _newTagController.dispose();
+    _query.dispose();
     super.dispose();
   }
 
-  Future<void> _createAndAttach() async {
-    final name = _newTagController.text.trim();
-    if (name.isEmpty) return;
+  /// The typed name, without a leading `#`.
+  String get _typed {
+    final text = _query.text.trim();
+    return (text.startsWith('#') ? text.substring(1) : text).trim();
+  }
+
+  void _toggle(Tag tag, bool on) {
+    final repo = ref.read(notesRepositoryProvider);
+    if (on) {
+      repo.addTag(widget.noteId, tag.id);
+    } else {
+      repo.removeTag(widget.noteId, tag.id);
+    }
+  }
+
+  Future<void> _createAndAttach(String name) async {
     final tagId = await ref.read(tagsRepositoryProvider).createTag(name);
     await ref.read(notesRepositoryProvider).addTag(widget.noteId, tagId);
-    _newTagController.clear();
+    _query.clear();
+  }
+
+  void _submit(List<Tag> allTags, Set<String> selected) {
+    final name = _typed;
+    if (name.isEmpty) {
+      Navigator.of(context).pop();
+      return;
+    }
+    final exact = allTags.where(
+      (t) => t.name.toLowerCase() == name.toLowerCase(),
+    );
+    if (exact.isEmpty) {
+      _createAndAttach(name);
+    } else {
+      if (!selected.contains(exact.first.id)) _toggle(exact.first, true);
+      _query.clear();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final note = ref.watch(noteByIdProvider(widget.noteId)).value;
-    final allTags = ref.watch(allTagsProvider).value ?? const [];
+    final allTags = ref.watch(allTagsProvider).value ?? const <Tag>[];
     final selected = note?.tagIds.toSet() ?? const <String>{};
+    final name = _typed;
+    final q = name.toLowerCase();
+    final shown = [
+      for (final tag in allTags)
+        if (q.isEmpty || tag.name.toLowerCase().contains(q)) tag,
+    ];
+    final canCreate =
+        name.isNotEmpty && !allTags.any((t) => t.name.toLowerCase() == q);
+    final title = note?.title.trim() ?? '';
 
-    return AlertDialog(
-      title: const Text('Tags'),
-      content: SizedBox(
-        width: 320,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (allTags.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text('No tags yet — create one below.'),
-              )
-            else
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 240),
-                child: ListView(
-                  shrinkWrap: true,
-                  children: [
-                    for (final tag in allTags)
-                      // Right-click / long-press: Rename, Delete — the
-                      // only place to manage tags on mobile.
-                      GestureDetector(
-                        onSecondaryTapDown: (details) => showTagActionsMenu(
-                          context,
-                          ref,
-                          tag,
-                          details.globalPosition,
-                        ),
-                        onLongPressStart: (details) => showTagActionsMenu(
-                          context,
-                          ref,
-                          tag,
-                          details.globalPosition,
-                        ),
-                        child: CheckboxListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          controlAffinity: ListTileControlAffinity.leading,
-                          title: Text(tag.name),
-                          value: selected.contains(tag.id),
-                          onChanged: (checked) {
-                            final repo = ref.read(notesRepositoryProvider);
-                            if (checked ?? false) {
-                              repo.addTag(widget.noteId, tag.id);
-                            } else {
-                              repo.removeTag(widget.noteId, tag.id);
-                            }
-                          },
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            const Divider(height: 20),
-            Row(
+    return NooteDialog(
+      icon: Icons.sell_outlined,
+      title: 'Tags',
+      subtitle: title.isEmpty ? null : 'For “$title”',
+      width: 380,
+      autofocus: false,
+      onSubmit: () => _submit(allTags, selected),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          NooteField(
+            controller: _query,
+            hint: allTags.isEmpty ? 'Name a new tag' : 'Search or create a tag',
+            keepFocusOnSubmit: true,
+            onSubmitted: (_) => _submit(allTags, selected),
+          ),
+          const SizedBox(height: 4),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 240),
+            child: ListView(
+              shrinkWrap: true,
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _newTagController,
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      hintText: 'New tag name',
+                for (final tag in shown)
+                  // Right-click / long-press: Rename, Delete — the
+                  // only place to manage tags on mobile.
+                  GestureDetector(
+                    onSecondaryTapDown: (details) => showTagActionsMenu(
+                      context,
+                      ref,
+                      tag,
+                      details.globalPosition,
                     ),
-                    onSubmitted: (_) => _createAndAttach(),
+                    onLongPressStart: (details) => showTagActionsMenu(
+                      context,
+                      ref,
+                      tag,
+                      details.globalPosition,
+                    ),
+                    child: _TagRow(
+                      name: tag.name,
+                      checked: selected.contains(tag.id),
+                      onTap: () => _toggle(tag, !selected.contains(tag.id)),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                TextButton(onPressed: _createAndAttach, child: const Text('Add')),
+                if (canCreate)
+                  _TagRow(
+                    name: 'Create “$name”',
+                    create: true,
+                    onTap: () => _createAndAttach(name),
+                  ),
+                if (shown.isEmpty && !canCreate)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Text(
+                      'No tags yet. Type a name to create one.',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 12.5,
+                        color: context.nooteColors.textFaint,
+                      ),
+                    ),
+                  ),
               ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
+      hint: const KeyHint(['Type to search or create']),
       actions: [
-        TextButton(
+        NooteButton.primary(
+          'Done',
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Done'),
         ),
       ],
+    );
+  }
+}
+
+class _TagRow extends StatelessWidget {
+  const _TagRow({
+    required this.name,
+    this.checked = false,
+    this.create = false,
+    required this.onTap,
+  });
+
+  final String name;
+  final bool checked;
+
+  /// The "Create “name”" row: a plus instead of a checkbox.
+  final bool create;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = context.nooteColors;
+    final textStyle = TextStyle(
+      fontFamily: 'Inter',
+      fontSize: 13,
+      color: create
+          ? theme.colorScheme.onSurfaceVariant
+          : theme.colorScheme.onSurface,
+    );
+    return Semantics(
+      checked: create ? null : checked,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(7),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+          child: Row(
+            children: [
+              if (create)
+                Icon(Icons.add, size: 16, color: colors.textFaint)
+              else
+                Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: checked ? theme.colorScheme.onSurface : null,
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(
+                      color: checked
+                          ? theme.colorScheme.onSurface
+                          : colors.textFaint,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: checked
+                      ? Icon(
+                          Icons.check,
+                          size: 12,
+                          color: theme.scaffoldBackgroundColor,
+                        )
+                      : null,
+                ),
+              const SizedBox(width: 9),
+              if (!create)
+                Text('#', style: textStyle.copyWith(color: colors.textFaint)),
+              Expanded(
+                child: Text(
+                  name,
+                  overflow: TextOverflow.ellipsis,
+                  style: textStyle,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

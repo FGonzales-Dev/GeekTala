@@ -81,6 +81,23 @@ class FolderTree {
     return !isSameOrInside(into, id);
   }
 
+  /// [id] with its parents, e.g. `Apple Notes / Pivotly`.
+  String pathOf(String id, {String separator = ' / '}) {
+    final names = <String>[];
+    for (String? f = id; f != null; f = _parentOf[f]) {
+      final folder = _byId[f];
+      if (folder == null) break;
+      names.insert(0, folder.name);
+    }
+    return names.join(separator);
+  }
+
+  /// Whether to leave the Shared folder out of the app: sharing isn't
+  /// built yet, so it's hidden while it has no notes ([noteCount]) and no
+  /// subfolders.
+  bool isHiddenShared(String id, {int noteCount = 0}) =>
+      id == 'shared' && noteCount == 0 && childrenOf(id).isEmpty;
+
   /// Every folder in display order (depth-first), with its depth.
   List<({Folder folder, int depth})> flatten() {
     final result = <({Folder folder, int depth})>[];

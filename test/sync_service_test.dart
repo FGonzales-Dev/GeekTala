@@ -79,10 +79,22 @@ void main() {
     expect(await db.syncDao.pendingCount(), 0);
     // Parent folder before its child, folders before notes, notes before
     // their tag links.
-    expect(indexOf('folders', 'work'), lessThan(indexOf('folders', 'engineering')));
-    expect(indexOf('folders', 'engineering'), lessThan(indexOf('notes', 'sync-architecture')));
-    expect(indexOf('tags', 'architecture'), lessThan(indexOf('notes_tags', 'sync-architecture::architecture')));
-    expect(indexOf('notes', 'sync-architecture'), lessThan(indexOf('notes_tags', 'sync-architecture::architecture')));
+    expect(
+      indexOf('folders', 'work'),
+      lessThan(indexOf('folders', 'engineering')),
+    );
+    expect(
+      indexOf('folders', 'engineering'),
+      lessThan(indexOf('notes', 'sync-architecture')),
+    );
+    expect(
+      indexOf('tags', 'architecture'),
+      lessThan(indexOf('notes_tags', 'sync-architecture::architecture')),
+    );
+    expect(
+      indexOf('notes', 'sync-architecture'),
+      lessThan(indexOf('notes_tags', 'sync-architecture::architecture')),
+    );
 
     final note = remote.allPushed[indexOf('notes', 'grocery-list')];
     expect(note['op'], 'upsert');
@@ -111,25 +123,34 @@ void main() {
     expect(trashed['op'], 'upsert');
     expect((trashed['row']! as Map)['is_deleted'], true);
 
-    final link = remote.allPushed[indexOf('notes_tags', 'sync-architecture::architecture')];
+    final link = remote
+        .allPushed[indexOf('notes_tags', 'sync-architecture::architecture')];
     expect(link['op'], 'delete');
-    expect(link['row'], {'note_id': 'sync-architecture', 'tag_id': 'architecture'});
-    expect(remote.allPushed[indexOf('notes', 'sync-architecture')]['op'], 'delete');
+    expect(link['row'], {
+      'note_id': 'sync-architecture',
+      'tag_id': 'architecture',
+    });
+    expect(
+      remote.allPushed[indexOf('notes', 'sync-architecture')]['op'],
+      'delete',
+    );
   });
 
   test('a note edited while uploading stays queued', () async {
     remote.onPush = () => db.notesDao.updateNote(
-          'grocery-list',
-          NotesTableCompanion(
-            title: const Value('Edited mid-upload'),
-            updatedAt: Value(DateTime.now()),
-          ),
-        );
+      'grocery-list',
+      NotesTableCompanion(
+        title: const Value('Edited mid-upload'),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
 
     await sync.upload();
 
     final left = await db.syncDao.outboxEntries();
-    expect(left.map((e) => (e.entity, e.recordId)), [('notes', 'grocery-list')]);
+    expect(left.map((e) => (e.entity, e.recordId)), [
+      ('notes', 'grocery-list'),
+    ]);
   });
 
   test('a failed upload keeps everything queued', () async {
@@ -147,7 +168,10 @@ void main() {
     await sync.upload();
 
     expect(remote.pushes.length, greaterThan(1));
-    expect(remote.pushes.every((p) => p.length <= SyncService.maxBatchChanges), isTrue);
+    expect(
+      remote.pushes.every((p) => p.length <= SyncService.maxBatchChanges),
+      isTrue,
+    );
     expect(remote.allPushed, hasLength(seededRows + 150));
     expect(await db.syncDao.pendingCount(), 0);
   });
@@ -156,7 +180,14 @@ void main() {
     await sync.upload();
     const owner = '00000000-0000-0000-0000-000000000001';
     remote.server['folders'] = [
-      {'owner_id': owner, 'id': 'personal', 'name': 'Personal', 'parent_id': null, 'updated_at': '2026-11-09T10:00:00+00:00', 'is_deleted': false},
+      {
+        'owner_id': owner,
+        'id': 'personal',
+        'name': 'Personal',
+        'parent_id': null,
+        'updated_at': '2026-11-09T10:00:00+00:00',
+        'is_deleted': false,
+      },
     ];
     remote.server['tags'] = [
       {'owner_id': owner, 'id': 't1', 'name': 'server-tag'},
@@ -168,7 +199,9 @@ void main() {
         'folder_id': 'personal',
         'title': 'From the server',
         'title_style_json': <Object>[],
-        'body_json': {'document': {'type': 'page', 'children': <Object>[]}},
+        'body_json': {
+          'document': {'type': 'page', 'children': <Object>[]},
+        },
         'created_at': '2026-11-09T10:00:00+00:00',
         'updated_at': '2026-11-09T11:00:00+00:00',
         'is_deleted': false,
@@ -207,7 +240,11 @@ void main() {
   });
 
   test('another account signing in never inherits local notes', () async {
-    expect(await sync.adoptAccount('user-a'), isFalse);
+    // The first sign-in on a device replaces the demo content too.
+    expect(await sync.adoptAccount('user-a'), isTrue);
+    expect(await db.select(db.notesTable).get(), isEmpty);
+    // Nothing on the server for user-a: they get the demo content.
+    await sync.downloadForNewAccount();
     expect(await db.select(db.notesTable).get(), hasLength(6));
     expect(await sync.adoptAccount('user-a'), isFalse);
 
@@ -220,6 +257,44 @@ void main() {
     await sync.downloadForNewAccount();
     expect(await db.select(db.notesTable).get(), hasLength(6));
     expect(await db.syncDao.pendingCount(), seededRows);
+  });
+
+  test('a new device takes the account\'s notes, not its demo notes', () async {
+    remote.server['folders'] = [
+      {
+        'owner_id': 'u',
+        'id': 'personal',
+        'name': 'Personal',
+        'parent_id': null,
+        'updated_at': '2026-11-09T10:00:00+00:00',
+        'is_deleted': false,
+      },
+    ];
+    remote.server['notes'] = [
+      {
+        'owner_id': 'u',
+        'id': 'mine',
+        'folder_id': 'personal',
+        'title': 'My note',
+        'title_style_json': <Object>[],
+        'body_json': {
+          'document': {'type': 'page', 'children': <Object>[]},
+        },
+        'created_at': '2026-11-09T10:00:00+00:00',
+        'updated_at': '2026-11-09T10:00:00+00:00',
+        'is_deleted': false,
+        'deleted_at': null,
+      },
+    ];
+
+    expect(await sync.adoptAccount('u'), isTrue);
+    await sync.downloadForNewAccount();
+
+    final notes = await db.select(db.notesTable).get();
+    expect(notes.map((n) => n.id), ['mine']);
+    // Nothing of the demo content is queued for upload.
+    expect(await db.syncDao.pendingCount(), 1); // the "Shared" folder
+    expect(remote.allPushed, isEmpty);
   });
 
   test('the pending count updates live as notes change', () async {

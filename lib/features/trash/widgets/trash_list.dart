@@ -42,7 +42,7 @@ class TrashList extends ConsumerWidget {
               ),
               if (notes.isNotEmpty)
                 TextButton(
-                  onPressed: () => _emptyTrash(ref, notes),
+                  onPressed: () => emptyTrashFlow(context, ref, notes),
                   child: const Text('Empty Trash'),
                 ),
             ],
@@ -70,12 +70,6 @@ class TrashList extends ConsumerWidget {
     );
   }
 
-  Future<void> _emptyTrash(WidgetRef ref, List<Note> notes) async {
-    final repository = ref.read(notesRepositoryProvider);
-    for (final note in notes) {
-      await repository.permanentlyDeleteNote(note.id);
-    }
-  }
 }
 
 class _TrashRow extends ConsumerWidget {

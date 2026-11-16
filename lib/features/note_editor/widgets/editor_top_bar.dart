@@ -4,8 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/avatar_stack.dart';
 import '../../../core/widgets/sync_status_indicator.dart';
 import '../../../data/models/note.dart';
@@ -13,7 +11,7 @@ import '../../../data/providers/folders_providers.dart';
 import '../../../data/providers/notes_providers.dart';
 import '../markdown_io.dart';
 
-/// `.editor-topbar` — breadcrumb, sync status, collaborators, Share button.
+/// `.editor-topbar` — breadcrumb, sync status, collaborators, and the ••• menu.
 class EditorTopBar extends ConsumerWidget {
   const EditorTopBar({super.key, required this.note});
 
@@ -60,8 +58,7 @@ class EditorTopBar extends ConsumerWidget {
             const SizedBox(width: 12),
             AvatarStack(initials: note.collaboratorInitials),
           ],
-          const SizedBox(width: 12),
-          _ShareButton(),
+          // A Share button comes back when sharing is built.
           const SizedBox(width: 8),
           _OverflowMenu(note: note),
         ],
@@ -98,48 +95,6 @@ class _OverflowMenu extends ConsumerWidget {
         PopupMenuItem(value: 'export', child: Text('Export as Markdown…')),
         PopupMenuItem(value: 'trash', child: Text('Move to Trash')),
       ],
-    );
-  }
-}
-
-class _ShareButton extends StatelessWidget {
-  const _ShareButton();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = context.nooteColors;
-    return Material(
-      color: colors.surfaceAlt,
-      borderRadius: BorderRadius.circular(AppRadius.small + 1),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadius.small + 1),
-        onTap: () {},
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            border: Border.all(color: theme.colorScheme.outline),
-            borderRadius: BorderRadius.circular(AppRadius.small + 1),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AppIcon(
-                AppIconName.share,
-                size: 12,
-                color: theme.colorScheme.onSurface,
-              ),
-              const SizedBox(width: 5),
-              Text(
-                'Share',
-                style: AppTextStyles.shareButton.copyWith(
-                  color: theme.colorScheme.onSurface,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

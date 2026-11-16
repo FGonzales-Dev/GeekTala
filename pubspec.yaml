@@ -66,6 +66,7 @@ dependencies:
   desktop_drop: ^0.8.4
   provider: ^6.1.5+1
   url_launcher: ^6.3.2
+  pdfrx: ^2.12.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

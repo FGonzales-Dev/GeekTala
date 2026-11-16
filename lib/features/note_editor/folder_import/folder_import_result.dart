@@ -27,3 +27,16 @@ class FolderImportResult {
   /// Paths (relative to the chosen folder) that couldn't be read.
   final List<String> failedFiles;
 }
+
+/// What importing a folder would do — see `previewMarkdownDirectory`.
+class FolderImportPreview {
+  const FolderImportPreview({required this.total, required this.existing});
+
+  /// Notes (Markdown files) in the folder.
+  final int total;
+
+  /// Of those, the ones already in Noote (same folder, same title).
+  final int existing;
+
+  int get missing => total - existing;
+}

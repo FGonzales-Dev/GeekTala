@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Noote Mobile Redesign</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Colours and radii are Noote's own (lib/core/theme/, noote-ui-concepts.html). */
+  :root{
+    --bg:#FAFAF7; --surface:#FFFFFF; --surface-alt:#F2F1EE; --surface-raised:#FBFBF9;
+    --border:#E4E3DF; --border-soft:#EDEDE9;
+    --text:#1A1A18; --text-muted:#6B6B66; --text-faint:#A3A39D;
+    --active-bg:#F0EFEB; --page:#EFEEEA;
+    --shadow: 0 1px 2px rgba(20,20,18,0.04), 0 8px 24px rgba(20,20,18,0.06);
+    --shadow-lg: 0 20px 60px rgba(20,20,18,0.16);
+    --radius:10px; --radius-sm:6px;
+    --ok:#7C9A78; --bad:#C2553F; --mark:rgba(255,193,7,0.35);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#121212; --surface:#1C1C1C; --surface-alt:#202020; --surface-raised:#232323;
+      --border:#2C2C2A; --border-soft:#252523;
+      --text:#EDEDEA; --text-muted:#9A9A94; --text-faint:#68685F;
+      --active-bg:#242422; --page:#0B0B0B;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.4);
+      --shadow-lg: 0 20px 60px rgba(0,0,0,0.55);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#121212; --surface:#1C1C1C; --surface-alt:#202020; --surface-raised:#232323;
+    --border:#2C2C2A; --border-soft:#252523;
+    --text:#EDEDEA; --text-muted:#9A9A94; --text-faint:#68685F;
+    --active-bg:#242422; --page:#0B0B0B;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.4);
+    --shadow-lg: 0 20px 60px rgba(0,0,0,0.55);
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; background:var(--page); color:var(--text);
+    font-family:Inter, system-ui, sans-serif; -webkit-font-smoothing:antialiased;
+  }
+  svg{ fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+
+  /* ---- Page ---- */
+  header.page{
+    max-width:1400px; margin:0 auto; padding:28px 24px 8px;
+    display:flex; gap:24px; align-items:flex-start; justify-content:space-between; flex-wrap:wrap;
+  }
+  header.page h1{ margin:0 0 6px; font-size:24px; letter-spacing:-0.02em; }
+  header.page p{ margin:0; color:var(--text-muted); font-size:14px; max-width:720px; line-height:1.5; }
+  .theme-switch{
+    display:flex; background:var(--surface); border:1px solid var(--border);
+    border-radius:9px; padding:3px; gap:2px; flex-shrink:0;
+  }
+  .theme-switch button{
+    border:0; background:transparent; color:var(--text-muted); font:500 12.5px Inter, sans-serif;
+    padding:6px 12px; border-radius:6px; cursor:pointer;
+  }
+  .theme-switch button[aria-pressed="true"]{ background:var(--active-bg); color:var(--text); }
+  section{ max-width:1400px; margin:0 auto; padding:18px 24px 8px; }
+  section > h2{ font-size:13px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint); margin:18px 0 14px; }
+  .changes{ display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; }
+  .change{
+    background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--radius);
+    padding:14px 16px; font-size:13px; line-height:1.5; color:var(--text-muted);
+  }
+  .change b{ display:block; color:var(--text); font-size:13.5px; margin-bottom:3px; }
+
+  /* ---- Phones ---- */
+  .phones{ display:flex; gap:34px; flex-wrap:wrap; justify-content:center; padding:6px 0 10px; }
+  figure{ margin:0; display:flex; flex-direction:column; align-items:center; gap:12px; }
+  figcaption{ font-size:13px; color:var(--text-muted); text-align:center; max-width:300px; line-height:1.45; }
+  figcaption b{ color:var(--text); display:block; font-size:14px; margin-bottom:2px; }
+  .tag{ display:inline-block; font-size:10.5px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase;
+        padding:2px 7px; border-radius:20px; margin-bottom:4px; }
+  .tag.now{ background:rgba(194,85,63,0.14); color:var(--bad); }
+  .tag.new{ background:rgba(124,154,120,0.18); color:var(--ok); }
+  .phone{
+    width:320px; height:660px; border-radius:38px; border:8px solid var(--surface);
+    background:var(--bg); box-shadow:var(--shadow-lg); overflow:hidden; position:relative;
+    display:flex; flex-direction:column;
+  }
+  .phone.dim{ opacity:0.82; }
+  .status{ height:30px; flex-shrink:0; display:flex; justify-content:space-between; align-items:flex-end;
+           padding:0 22px 2px; font-size:11px; font-weight:600; }
+  .status .dots{ display:flex; gap:4px; align-items:center; }
+  .status .dots i{ width:14px; height:8px; border-radius:2px; border:1.4px solid var(--text); display:block; }
+
+  /* Navigation bar (new) */
+  .nav{ padding:6px 14px 2px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; min-height:34px; }
+  .nav .back{ display:flex; align-items:center; gap:2px; font-size:14px; color:var(--text-muted); }
+  .nav .back svg{ width:18px; height:18px; }
+  .nav .actions{ display:flex; gap:16px; color:var(--text-muted); }
+  .nav .actions svg{ width:19px; height:19px; }
+  .large-title{ padding:4px 18px 2px; flex-shrink:0; }
+  .large-title h1{ margin:0; font-size:26px; font-weight:700; letter-spacing:-0.02em; }
+  .large-title .sub{ font-size:12.5px; color:var(--text-faint); margin-top:1px; }
+
+  /* Search field (new: no fill) */
+  .search{
+    margin:10px 16px 12px; display:flex; align-items:center; gap:8px; flex-shrink:0;
+    border:1px solid var(--border); border-radius:var(--radius); padding:8px 11px;
+    color:var(--text-faint); font-size:13px; background:transparent;
+  }
+  .search svg{ width:15px; height:15px; }
+  .search.old{ background:var(--surface-alt); border-color:var(--border); border-radius:9px; }
+
+  .scroll{ flex:1; overflow-y:auto; padding:0 14px 14px; min-height:0; }
+  .scroll::-webkit-scrollbar{ display:none; }
+  .group-label{ font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em;
+                color:var(--text-faint); margin:12px 6px 6px; }
+  .group{ background:var(--surface); border:1px solid var(--border-soft); border-radius:12px; overflow:hidden; }
+  .row{ display:flex; align-items:center; gap:9px; padding:10px 12px; font-size:14px; border-top:1px solid var(--border-soft); }
+  .row:first-child{ border-top:0; }
+  .row .ic{ width:17px; height:17px; color:var(--text-muted); flex-shrink:0; }
+  .row .disc{ width:14px; height:14px; color:var(--text-faint); flex-shrink:0; }
+  .row .disc.open{ transform:rotate(90deg); }
+  .row .gap{ width:14px; flex-shrink:0; }
+  .row .name{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .row .count{ color:var(--text-faint); font-size:12.5px; }
+  .row .chev{ width:14px; height:14px; color:var(--text-faint); flex-shrink:0; }
+  .row.indent1{ padding-left:30px; }
+  .row.indent2{ padding-left:48px; }
+  .tags{ display:flex; gap:7px; flex-wrap:wrap; padding:2px 4px; }
+  .chip{ font-size:12px; padding:4px 11px; border-radius:20px; border:1px solid var(--border); color:var(--text-muted); }
+
+  /* Note rows */
+  .note{ padding:10px 12px; border-top:1px solid var(--border-soft); }
+  .note:first-child{ border-top:0; }
+  .note .t{ font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .note .m{ font-size:12.5px; color:var(--text-muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .note .m span{ color:var(--text-faint); margin-right:6px; }
+
+  /* Bottom bar (new: no floating button) */
+  .bottombar{
+    flex-shrink:0; display:flex; align-items:center; justify-content:space-between;
+    padding:10px 18px 18px; border-top:1px solid var(--border-soft); background:var(--bg);
+    font-size:12px; color:var(--text-faint);
+  }
+  .bottombar svg{ width:21px; height:21px; color:var(--text); }
+  .bottombar .spacer{ width:21px; }
+
+  /* Editor */
+  .editor{ flex:1; overflow-y:auto; padding:6px 18px 16px; background:var(--bg); }
+  .editor::-webkit-scrollbar{ display:none; }
+  .e-title{ font-size:22px; font-weight:700; letter-spacing:-0.01em; margin:4px 0 6px; padding:2px 0; }
+  .e-title.old{ background:var(--surface-alt); padding:6px 8px; border-radius:4px; }
+  .e-tag{ display:inline-flex; align-items:center; gap:4px; font-size:11.5px; color:var(--text-faint);
+          border:1px solid var(--border); border-radius:20px; padding:2px 9px; margin-bottom:12px; }
+  .e-p{ font-size:14px; line-height:1.55; margin:0 0 8px; }
+  .e-h{ font-size:16px; font-weight:700; margin:14px 0 6px; }
+  .e-li{ font-size:14px; line-height:1.55; margin:0 0 4px; padding-left:16px; position:relative; }
+  .e-li:before{ content:"•"; position:absolute; left:3px; color:var(--text-muted); }
+  .e-img{ border-radius:8px; height:120px; margin:8px 0 10px;
+          background:linear-gradient(135deg,#9AAAB8 0%,#9CAF9A 55%,#C2A490 100%); position:relative; overflow:hidden; }
+  .e-img:after{ content:""; position:absolute; inset:auto -10% -40% 20%; height:80%; border-radius:50%; background:rgba(255,255,255,0.18); }
+  .pdf{ border:1px solid var(--border-soft); border-radius:8px; overflow:hidden; margin:6px 0 4px; }
+  .pdf .page{ background:#fff; height:150px; padding:14px 16px; display:flex; flex-direction:column; gap:7px; }
+  .pdf .page i{ display:block; height:6px; border-radius:3px; background:#E4E3DF; }
+  .pdf .page i.h{ height:10px; width:55%; background:#1A1A18; opacity:0.85; }
+  .pdf .bar{ display:flex; align-items:center; gap:8px; padding:7px 10px; background:var(--surface-alt); font-size:12px; }
+  .pdf .bar svg{ width:16px; height:16px; color:var(--text-muted); }
+  .pdf .bar .n{ flex:1; min-width:0; }
+  .pdf .bar .n b{ display:block; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--text); }
+  .pdf .bar .n span{ color:var(--text-faint); font-size:11px; }
+  .kbbar{
+    flex-shrink:0; display:flex; justify-content:space-between; align-items:center;
+    padding:9px 14px 18px; border-top:1px solid var(--border-soft); background:var(--bg); color:var(--text);
+  }
+  .kbbar svg{ width:20px; height:20px; }
+  .kbbar .aa{ font-weight:600; font-size:15px; }
+  .kbbar .done{ font-size:13px; font-weight:600; }
+
+  /* Current design (for comparison) */
+  .old-top{ padding:10px 18px 6px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; }
+  .old-top h1{ font-size:20px; margin:0; font-weight:700; }
+  .old-chips{ display:flex; gap:7px; padding:0 18px 12px; flex-shrink:0; }
+  .old-chips span{ font-size:11.5px; padding:5px 12px; border-radius:20px; background:var(--surface-alt); border:1px solid var(--border); color:var(--text-muted); }
+  .old-chips span.on{ background:var(--text); color:var(--bg); border-color:var(--text); }
+  .card{ background:var(--surface); border:1px solid var(--border-soft); border-radius:11px; padding:11px 12px; margin-bottom:9px; }
+  .card .t{ font-size:13px; font-weight:600; }
+  .card .m{ font-size:12px; color:var(--text-muted); margin-top:3px; }
+  .fab{ position:absolute; right:18px; bottom:84px; width:48px; height:48px; border-radius:50%;
+        background:var(--text); color:var(--bg); display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow); }
+  .fab svg{ width:20px; height:20px; }
+  .tabbar{ flex-shrink:0; display:flex; justify-content:space-around; padding:9px 8px 16px; border-top:1px solid var(--border); background:var(--surface); }
+  .tabbar div{ display:flex; flex-direction:column; align-items:center; gap:3px; font-size:9.5px; color:var(--text-faint); }
+  .tabbar div.on{ color:var(--text); }
+  .tabbar svg{ width:19px; height:19px; }
+  .x{ position:absolute; border:2px solid var(--bad); border-radius:10px; pointer-events:none; }
+  .x b{ position:absolute; top:-10px; right:-10px; width:20px; height:20px; border-radius:50%; background:var(--bad);
+        color:#fff; font-size:11px; display:flex; align-items:center; justify-content:center; }
+
+  /* Text fields comparison */
+  .fields{ display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; }
+  .field-card{ background:var(--bg); border:1px solid var(--border-soft); border-radius:12px; padding:16px; }
+  .field-card h3{ margin:0 0 12px; font-size:13px; font-weight:600; color:var(--text-muted); }
+  .pair{ display:grid; grid-template-columns:1fr 1fr; gap:12px; align-items:start; }
+  .pair .lbl{ font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px; }
+  .pair .lbl.now{ color:var(--bad); } .pair .lbl.new{ color:var(--ok); }
+  .input{ border:1px solid var(--border); border-radius:var(--radius-sm); padding:9px 11px; font-size:13px; color:var(--text-faint); }
+  .input.old{ background:var(--surface-alt); }
+  .input.focus{ border-color:var(--text-muted); color:var(--text); box-shadow:0 0 0 3px var(--active-bg); }
+  .title-demo{ font-size:17px; font-weight:700; padding:4px 0; }
+  .title-demo.old{ background:var(--surface-alt); padding:6px 8px; border-radius:4px; }
+
+  .plan{ background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--radius); padding:6px 20px; }
+  .plan ol{ margin:12px 0; padding-left:20px; }
+  .plan li{ font-size:13.5px; line-height:1.55; color:var(--text-muted); margin:0 0 10px; }
+  .plan li b{ color:var(--text); }
+  /* ---- Desktop dialogs ---- */
+  .stage{
+    position:relative; border-radius:14px; overflow:hidden; border:1px solid var(--border-soft);
+    padding:34px 24px; display:flex; align-items:center; justify-content:center;
+    background:
+      linear-gradient(to right, var(--surface-alt) 0 20%, var(--border-soft) 20% calc(20% + 1px),
+                      var(--bg) calc(20% + 1px) 46%, var(--border-soft) 46% calc(46% + 1px), var(--surface) calc(46% + 1px));
+  }
+  .stage:after{ content:""; position:absolute; inset:0; background:rgba(12,12,11,0.32); }
+  .stage > *{ position:relative; z-index:1; }
+  .stage-label{ position:absolute; top:10px; left:12px; z-index:2; }
+  .dialogs{ display:grid; grid-template-columns:repeat(auto-fit,minmax(460px,1fr)); gap:18px; }
+  .wide{ grid-column:1 / -1; }
+  .dialog{
+    background:var(--surface); border:1px solid var(--border); border-radius:14px;
+    box-shadow:var(--shadow-lg); width:420px; max-width:100%; color:var(--text);
+  }
+  .d-head{ display:flex; align-items:flex-start; gap:12px; padding:18px 18px 4px 20px; }
+  .d-icon{ width:34px; height:34px; border-radius:10px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+           background:var(--active-bg); color:var(--text-muted); }
+  .d-icon svg{ width:18px; height:18px; }
+  .d-icon.danger{ background:rgba(194,85,63,0.12); color:var(--bad); }
+  .d-title{ font-size:15.5px; font-weight:600; letter-spacing:-0.01em; }
+  .d-sub{ font-size:12.5px; color:var(--text-muted); margin-top:3px; line-height:1.5; }
+  .d-close{ margin-left:auto; color:var(--text-faint); padding:2px; }
+  .d-close svg{ width:16px; height:16px; display:block; }
+  .d-body{ padding:12px 20px 4px; }
+  .d-foot{ display:flex; align-items:center; gap:8px; padding:14px 18px 16px 20px; }
+  .d-foot .hint{ margin-right:auto; font-size:11.5px; color:var(--text-faint); }
+  kbd{ font:500 10.5px Inter, sans-serif; border:1px solid var(--border); border-bottom-width:2px; border-radius:4px;
+       padding:0 5px; color:var(--text-muted); background:var(--surface-raised); }
+  .btn{ font:500 12.5px Inter, sans-serif; padding:7px 13px; border-radius:8px; border:1px solid var(--border);
+        background:var(--surface); color:var(--text); white-space:nowrap; }
+  .btn.primary{ background:var(--text); color:var(--bg); border-color:var(--text); }
+  .btn.danger{ background:var(--bad); border-color:var(--bad); color:#fff; }
+  .btn.ghost{ background:transparent; border-color:transparent; color:var(--text-muted); }
+  .btn.ghost-danger{ background:transparent; border-color:transparent; color:var(--bad); }
+  .facts{ display:flex; gap:6px; flex-wrap:wrap; margin:2px 0 12px; }
+  .fact{ font-size:11.5px; padding:3px 9px; border-radius:20px; background:var(--active-bg); color:var(--text-muted); }
+  .option{ display:flex; gap:10px; padding:11px 12px; border:1px solid var(--border); border-radius:10px; margin-bottom:8px; }
+  .option.on{ border-color:var(--text-muted); background:var(--active-bg); }
+  .option .radio{ width:16px; height:16px; border-radius:50%; border:1.5px solid var(--text-faint); margin-top:1px; flex-shrink:0; }
+  .option.on .radio{ border:5px solid var(--text); }
+  .option b{ display:block; font-size:13px; font-weight:600; }
+  .option span{ font-size:12px; color:var(--text-muted); line-height:1.45; }
+  .option .rec{ font-size:10.5px; font-weight:600; color:var(--ok); margin-left:6px; }
+  .option.danger-opt b{ color:var(--bad); }
+  .d-input{ display:flex; align-items:center; gap:8px; border:1px solid var(--text-muted); border-radius:8px;
+            padding:8px 11px; font-size:13.5px; box-shadow:0 0 0 3px var(--active-bg); }
+  .d-input.idle{ border-color:var(--border); box-shadow:none; color:var(--text-faint); }
+  .d-input svg{ width:15px; height:15px; color:var(--text-faint); }
+  .caret{ display:inline-block; width:1px; height:15px; background:var(--text); margin-left:1px; vertical-align:-2px; }
+  .field-row{ display:flex; align-items:center; justify-content:space-between; margin-top:10px; font-size:12.5px; color:var(--text-muted); }
+  .select{ display:flex; align-items:center; gap:6px; border:1px solid var(--border); border-radius:8px; padding:5px 10px; color:var(--text); font-size:12.5px; }
+  .select svg{ width:13px; height:13px; color:var(--text-faint); }
+  .tree{ border:1px solid var(--border-soft); border-radius:10px; margin-top:10px; padding:4px; max-height:236px; overflow:hidden; }
+  .t-row{ display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:7px; font-size:13px; }
+  .t-row svg{ width:15px; height:15px; color:var(--text-faint); flex-shrink:0; }
+  .t-row .badge{ margin-left:auto; font-size:10.5px; color:var(--text-faint); }
+  .t-row.sel{ background:var(--active-bg); font-weight:500; }
+  .t-row.sel .check{ margin-left:auto; color:var(--text); }
+  .t-row.off{ color:var(--text-faint); }
+  .t-row.i1{ padding-left:28px; } .t-row.i2{ padding-left:46px; }
+  .tag-row{ display:flex; align-items:center; gap:9px; padding:7px 9px; border-radius:7px; font-size:13px; }
+  .tag-row .box{ width:16px; height:16px; border-radius:5px; border:1.5px solid var(--text-faint); flex-shrink:0; }
+  .tag-row.on .box{ background:var(--text); border-color:var(--text); position:relative; }
+  .tag-row.on .box:after{ content:""; position:absolute; left:4.5px; top:1.5px; width:4px; height:8px; border:solid var(--bg); border-width:0 2px 2px 0; transform:rotate(45deg); }
+  .tag-row .hash{ color:var(--text-faint); }
+  .tag-row.create{ color:var(--text-muted); }
+  .tag-row.create svg{ width:15px; height:15px; }
+
+  /* Settings window */
+  .settings{ width:760px; max-width:100%; height:500px; display:flex; overflow:hidden; }
+  .s-nav{ width:196px; flex-shrink:0; background:var(--surface-raised); border-right:1px solid var(--border-soft); padding:16px 10px; display:flex; flex-direction:column; }
+  .s-nav .ttl{ font-size:15px; font-weight:600; padding:2px 10px 12px; }
+  .s-nav button{ display:flex; align-items:center; gap:9px; width:100%; text-align:left; border:0; background:transparent;
+                 padding:7px 10px; border-radius:7px; font:13px Inter, sans-serif; color:var(--text-muted); cursor:pointer; }
+  .s-nav button svg{ width:16px; height:16px; }
+  .s-nav button[aria-selected="true"]{ background:var(--active-bg); color:var(--text); font-weight:500; }
+  .s-nav .who{ margin-top:auto; display:flex; align-items:center; gap:8px; padding:8px 10px; font-size:11.5px; color:var(--text-faint); }
+  .avatar{ width:26px; height:26px; border-radius:50%; background:var(--ok); color:#fff; font-size:11px; font-weight:600;
+           display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .avatar.lg{ width:40px; height:40px; font-size:15px; }
+  .s-main{ flex:1; min-width:0; display:flex; flex-direction:column; }
+  .s-top{ display:flex; justify-content:flex-end; padding:12px 12px 0; }
+  .s-pane{ padding:0 28px 22px; overflow:auto; display:none; }
+  .s-pane.on{ display:block; }
+  .s-pane h3{ font-size:18px; margin:0 0 4px; letter-spacing:-0.01em; }
+  .s-pane .lead{ font-size:12.5px; color:var(--text-muted); margin:0 0 14px; }
+  .s-row{ display:flex; align-items:center; justify-content:space-between; gap:18px; padding:14px 0; border-top:1px solid var(--border-soft); }
+  .s-row .l b{ font-size:13.5px; font-weight:500; display:block; }
+  .s-row .l span{ font-size:12px; color:var(--text-muted); line-height:1.45; }
+  .seg{ display:flex; border:1px solid var(--border); border-radius:8px; padding:2px; gap:2px; flex-shrink:0; }
+  .seg span{ font-size:12px; padding:5px 10px; border-radius:6px; color:var(--text-muted); white-space:nowrap; }
+  .seg .on{ background:var(--active-bg); color:var(--text); font-weight:500; }
+  .switch{ width:36px; height:21px; border-radius:20px; background:var(--ok); position:relative; flex-shrink:0; }
+  .switch:after{ content:""; position:absolute; right:2px; top:2px; width:17px; height:17px; border-radius:50%; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.2); }
+  .themes{ display:flex; gap:12px; margin:4px 0 6px; }
+  .theme-card{ text-align:center; font-size:12px; color:var(--text-muted); }
+  .theme-card .pv{ width:118px; height:74px; border-radius:9px; border:1px solid var(--border); overflow:hidden; display:flex; margin-bottom:6px; }
+  .theme-card.on .pv{ border:2px solid var(--text); }
+  .theme-card.on{ color:var(--text); font-weight:500; }
+  .pv .sb{ width:30%; } .pv .main{ flex:1; padding:9px 8px; display:flex; flex-direction:column; gap:5px; }
+  .pv .main i{ display:block; height:5px; border-radius:3px; }
+  .pv.light .sb{ background:#F2F1EE; } .pv.light .main{ background:#FFFFFF; } .pv.light i{ background:#E4E3DF; } .pv.light i:first-child{ background:#1A1A18; width:60%; }
+  .pv.dark .sb{ background:#202020; } .pv.dark .main{ background:#1C1C1C; } .pv.dark i{ background:#2C2C2A; } .pv.dark i:first-child{ background:#EDEDEA; width:60%; }
+  .pv.system{ background:linear-gradient(135deg,#FFFFFF 50%,#1C1C1C 50%); }
+  .card-box{ border:1px solid var(--border-soft); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
+  .acct{ display:flex; align-items:center; gap:12px; }
+  .acct .who2{ flex:1; min-width:0; } .acct .who2 b{ display:block; font-size:13.5px; font-weight:600; }
+  .acct .who2 span{ font-size:12px; color:var(--text-muted); }
+  .sync-line{ display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; }
+  .sync-line i{ width:8px; height:8px; border-radius:50%; background:var(--ok); display:block; }
+  .sync-meta{ font-size:12px; color:var(--text-muted); margin:4px 0 12px 16px; }
+  .btns{ display:flex; gap:8px; flex-wrap:wrap; }
+  .about-grid{ display:grid; grid-template-columns:auto 1fr; gap:8px 18px; font-size:12.5px; }
+  .about-grid dt{ color:var(--text-faint); } .about-grid dd{ margin:0; }
+  .old-settings{ width:330px; padding:14px 16px 16px; transform-origin:center; }
+  .old-settings .o-h{ font-size:20px; font-weight:700; margin:6px 0 12px; display:flex; justify-content:space-between; }
+  .old-settings .o-l{ font-size:11px; color:var(--text-faint); font-weight:600; margin:10px 0 6px; }
+  .old-settings .o-seg{ display:flex; border:1px solid var(--border); border-radius:8px; background:var(--surface-alt); padding:3px; }
+  .old-settings .o-seg span{ flex:1; text-align:center; font-size:11.5px; padding:5px; border-radius:6px; color:var(--text-muted); }
+  .old-settings .o-seg span.on{ background:var(--surface); color:var(--text); font-weight:500; }
+  .old-settings .o-box{ border:1px solid var(--border); border-radius:10px; padding:10px; font-size:11.5px; color:var(--text-muted); }
+  .old-settings .o-btn{ display:inline-block; border-radius:16px; padding:5px 12px; font-size:11px; margin:8px 6px 0 0; border:1px solid var(--border); }
+  .old-settings .o-btn.f{ background:var(--surface-alt); }
+
+  footer{ max-width:1400px; margin:0 auto; padding:10px 24px 40px; color:var(--text-faint); font-size:12px; }
+  @media (max-width:700px){ .pair{ grid-template-columns:1fr; } .phone{ transform:scale(0.92); } }
+</style>
+</head>
+<body>
+<header class="page">
+  <div>
+    <h1>Noote redesign — mobile &amp; desktop dialogs</h1>
+    <p>Proposal: replace the mobile bottom tabs and floating button with an Apple&nbsp;Notes-style flow — Folders → notes → note —
+       hide Shared until sharing exists, drop the grey fill from text fields everywhere, and give the desktop's dialogs
+       one designed look instead of stock Material ones.</p>
+  </div>
+  <div class="theme-switch" role="group" aria-label="Theme">
+    <button type="button" data-set="system" aria-pressed="true">System</button>
+    <button type="button" data-set="light" aria-pressed="false">Light</button>
+    <button type="button" data-set="dark" aria-pressed="false">Dark</button>
+  </div>
+</header>
+
+<section>
+  <h2>What changes</h2>
+  <div class="changes">
+    <div class="change"><b>No bottom tabs</b>Folders is the home screen. Tap a folder to see its notes, tap a note to edit. Back goes up one level, like Apple Notes.</div>
+    <div class="change"><b>Shared is hidden</b>Removed until sharing is built. The hard-coded "Work / Personal / Shared" chips go too — folders replace them.</div>
+    <div class="change"><b>No floating button</b>New note sits in a bottom bar with the note count (and New folder on the folders screen). Settings moves to a gear at the top.</div>
+    <div class="change"><b>No grey text fields</b>Search, the note title, sign-in and dialog fields get a plain background with a thin outline (none for the title).</div>
+  </div>
+</section>
+
+<section>
+  <h2>Screens</h2>
+  <div class="phones">
+
+    <!-- CURRENT -->
+    <figure>
+      <div class="phone dim">
+        <div class="status"><span>9:41</span><span class="dots"><i></i></span></div>
+        <div class="old-top"><h1>Notes</h1></div>
+        <div class="search old"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Search notes</div>
+        <div class="old-chips"><span class="on">All</span><span>Work</span><span>Personal</span><span>Shared</span></div>
+        <div class="scroll" style="padding:0 12px">
+          <div class="card"><div class="t">Data loaded into local Pivotly</div><div class="m">Fountain Lake Phase 2 · Buhr</div></div>
+          <div class="card"><div class="t">Dredging-shaped tables</div><div class="m">One thing native handles that…</div></div>
+          <div class="card"><div class="t">test@pivotly.com</div><div class="m">N#142998003455zt</div></div>
+          <div class="card"><div class="t">Record sessions</div><div class="m">7. Set Area = CMA-1, Lift = Lift 1…</div></div>
+        </div>
+        <div class="fab"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div>
+        <div class="tabbar">
+          <div class="on"><svg viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h10"/></svg>Notes</div>
+          <div><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>Folders</div>
+          <div><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3 19c.8-3.3 3.2-5 6-5s5.2 1.7 6 5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.5c2.4.2 4.2 1.7 5 4.5"/></svg>Shared</div>
+          <div><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Settings</div>
+        </div>
+        <div class="x" style="left:14px;right:14px;top:94px;height:40px"><b>1</b></div>
+        <div class="x" style="left:14px;right:14px;top:138px;height:34px"><b>2</b></div>
+        <div class="x" style="right:12px;bottom:78px;width:60px;height:60px;border-radius:50%"><b>3</b></div>
+        <div class="x" style="left:6px;right:6px;bottom:4px;height:62px"><b>4</b></div>
+      </div>
+      <figcaption><span class="tag now">Today</span><b>Notes tab</b>1&nbsp;grey search field · 2&nbsp;hard-coded chips · 3&nbsp;floating button · 4&nbsp;tabs, incl. Shared (not built)</figcaption>
+    </figure>
+
+    <!-- NEW: FOLDERS (HOME) -->
+    <figure>
+      <div class="phone">
+        <div class="status"><span>9:41</span><span class="dots"><i></i></span></div>
+        <div class="nav">
+          <span></span>
+          <span class="actions" title="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></span>
+        </div>
+        <div class="large-title"><h1>Folders</h1></div>
+        <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Search all notes</div>
+        <div class="scroll">
+          <div class="group">
+            <div class="row"><span class="gap"></span><svg class="ic" viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h10"/></svg><span class="name">All Notes</span><span class="count">307</span><svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+          </div>
+          <div class="group-label">Folders</div>
+          <div class="group">
+            <div class="row"><svg class="disc open" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg><svg class="ic" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="name">Personal</span><span class="count">6</span><svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+            <div class="row indent1"><span class="gap"></span><svg class="ic" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="name">Work Email Format</span><span class="count">3</span><svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+            <div class="row"><svg class="disc open" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg><svg class="ic" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="name">Apple Notes</span><span class="count">0</span><svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+            <div class="row indent1"><span class="gap"></span><svg class="ic" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="name">Accounts</span><span class="count">9</span><svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+            <div class="row indent1"><span class="gap"></span><svg class="ic" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="name">Crowsnest</span><span class="count">35</span><svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+            <div class="row indent1"><span class="gap"></span><svg class="ic" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="name">Notes</span><span class="count">81</span><svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+            <div class="row indent1"><svg class="disc" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg><svg class="ic" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="name">Pivotly</span><span class="count">83</span><svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+          </div>
+          <div class="group-label">Tags</div>
+          <div class="tags"><span class="chip">#ideas</span><span class="chip">#recipes</span><span class="chip">#architecture</span></div>
+          <div class="group" style="margin-top:14px">
+            <div class="row"><span class="gap"></span><svg class="ic" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg><span class="name">Recently Deleted</span><span class="count">3</span><svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+          </div>
+        </div>
+        <div class="bottombar">
+          <svg viewBox="0 0 24 24" aria-label="New folder"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10.5v5M9.5 13h5"/></svg>
+          <span>Synced now</span>
+          <svg viewBox="0 0 24 24" aria-label="New note"><path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L13 14l-4 1 1-4z"/></svg>
+        </div>
+      </div>
+      <figcaption><span class="tag new">New</span><b>Folders — the home screen</b>All Notes, your folder tree (▸ hides subfolders, › opens a folder), tags and Recently Deleted. Gear opens Settings. New folder and New note live in the bottom bar.</figcaption>
+    </figure>
+
+    <!-- NEW: NOTES IN A FOLDER -->
+    <figure>
+      <div class="phone">
+        <div class="status"><span>9:41</span><span class="dots"><i></i></span></div>
+        <div class="nav">
+          <span class="back"><svg viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg>Folders</span>
+          <span class="actions"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg></span>
+        </div>
+        <div class="large-title"><h1>Pivotly</h1><div class="sub">83 notes</div></div>
+        <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Search Pivotly</div>
+        <div class="scroll">
+          <div class="group">
+            <div class="row"><span class="gap" style="width:0"></span><svg class="ic" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="name">jfb</span><span class="count">36</span><svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+          </div>
+          <div class="group-label">Previous 30 days</div>
+          <div class="group">
+            <div class="note"><div class="t">Data loaded into local Pivotly</div><div class="m"><span>9/28</span>Fountain Lake Phase 2 · Buhr</div></div>
+            <div class="note"><div class="t">Important correction</div><div class="m"><span>9/24</span>first: the actual capping setup UI</div></div>
+            <div class="note"><div class="t">NEXT_PUBLIC_ENVIRONMENT</div><div class="m"><span>11/6</span>NEXT_PUBLIC_DOMAIN_URL=https://…</div></div>
+          </div>
+          <div class="group-label">Earlier</div>
+          <div class="group">
+            <div class="note"><div class="t">test@pivotly.com</div><div class="m"><span>1/20</span>N#142998003455zt</div></div>
+            <div class="note"><div class="t">Record sessions</div><div class="m"><span>9/16</span>7. Set Area = CMA-1, Lift = Lift 1.</div></div>
+            <div class="note"><div class="t">domain-info.routes.ts</div><div class="m"><span>2/9</span>domain-publication.routes.ts</div></div>
+          </div>
+        </div>
+        <div class="bottombar">
+          <span class="spacer"></span>
+          <span>83 Notes</span>
+          <svg viewBox="0 0 24 24" aria-label="New note"><path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L13 14l-4 1 1-4z"/></svg>
+        </div>
+      </div>
+      <figcaption><span class="tag new">New</span><b>A folder's notes</b>Subfolders at the top, then notes grouped by date. ••• holds Import Markdown and Select. The new note goes into this folder.</figcaption>
+    </figure>
+
+    <!-- NEW: EDITOR -->
+    <figure>
+      <div class="phone">
+        <div class="status"><span>9:41</span><span class="dots"><i></i></span></div>
+        <div class="nav">
+          <span class="back"><svg viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg>Pivotly</span>
+          <span class="actions" style="align-items:center;gap:14px">
+            <span style="font-size:11.5px;color:var(--text-faint);display:flex;align-items:center;gap:5px"><i style="width:6px;height:6px;border-radius:50%;background:var(--ok);display:block"></i>Synced</span>
+            <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg>
+          </span>
+        </div>
+        <div class="editor">
+          <div class="e-title">Site visit — Fountain Lake</div>
+          <div class="e-tag">+ Tag</div>
+          <p class="e-p">Walked the north cells with Buhr. Liner seams look good; the overflow pipe still needs a cap.</p>
+          <div class="e-h">Photos</div>
+          <div class="e-img"></div>
+          <div class="e-li">Re-check cell 3 after rain</div>
+          <div class="e-li">Send report to the client</div>
+          <div class="e-h">Attachments</div>
+          <div class="pdf">
+            <div class="page"><i class="h"></i><i></i><i style="width:85%"></i><i style="width:70%"></i><i></i><i style="width:60%"></i></div>
+            <div class="bar"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg><span class="n"><b>Inspection checklist.pdf</b><span>PDF · 45 KB</span></span></div>
+          </div>
+        </div>
+        <div class="kbbar">
+          <span class="aa">Aa</span>
+          <svg viewBox="0 0 24 24" aria-label="Checklist"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>
+          <svg viewBox="0 0 24 24" aria-label="Bulleted list"><path d="M9 7h11M9 12h11M9 17h11"/><circle cx="5" cy="7" r=".8"/><circle cx="5" cy="12" r=".8"/><circle cx="5" cy="17" r=".8"/></svg>
+          <svg viewBox="0 0 24 24" aria-label="Code"><path d="m8 8-4 4 4 4M16 8l4 4-4 4"/></svg>
+          <svg viewBox="0 0 24 24" aria-label="Attach"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.3 3.3 0 0 1 4.7 4.7L10.2 17a1.7 1.7 0 0 1-2.4-2.4L15.5 7"/></svg>
+          <span class="done">Done</span>
+        </div>
+      </div>
+      <figcaption><span class="tag new">New</span><b>A note</b>Back to its folder; no Share button until sharing exists. Title has no grey band. A working bar above the keyboard: text styles, checklist, list, code, attach, Done.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section>
+  <h2>Text fields — no grey fill</h2>
+  <div class="fields">
+    <div class="field-card">
+      <h3>Search (mobile and desktop)</h3>
+      <div class="pair">
+        <div><div class="lbl now">Today</div><div class="input old">⌕&nbsp; Search notes</div></div>
+        <div><div class="lbl new">New</div><div class="input">⌕&nbsp; Search all notes</div></div>
+      </div>
+    </div>
+    <div class="field-card">
+      <h3>Note title (mobile and desktop)</h3>
+      <div class="pair">
+        <div><div class="lbl now">Today</div><div class="title-demo old">test@pivotly.com</div></div>
+        <div><div class="lbl new">New</div><div class="title-demo">test@pivotly.com</div></div>
+      </div>
+    </div>
+    <div class="field-card">
+      <h3>Sign-in, dialogs, tag picker</h3>
+      <div class="pair">
+        <div><div class="lbl now">Today</div><div class="input old">Email</div></div>
+        <div><div class="lbl new">New · focused</div><div class="input focus">francis@example.com</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Desktop dialogs — one designed look</h2>
+  <div class="changes" style="margin-bottom:16px">
+    <div class="change"><b>Same shape everywhere</b>Icon, title and a one-line summary at the top, close (×) on the right, buttons bottom-right with the keyboard hint on the left.</div>
+    <div class="change"><b>Show what will happen</b>Counts before you confirm — subfolders and notes affected, changes not uploaded, notes already imported.</div>
+    <div class="change"><b>Choices as cards</b>Options are cards you click, with the safe one preselected and marked, instead of bare radio buttons.</div>
+    <div class="change"><b>Keyboard first</b><kbd>Esc</kbd> closes, <kbd>↵</kbd> confirms, the first field is focused; destructive buttons are red and never the default.</div>
+  </div>
+
+  <div class="dialogs">
+    <!-- SETTINGS: today vs new -->
+    <div class="stage wide" style="gap:36px; flex-wrap:wrap; padding:40px 24px">
+      <span class="stage-label tag now">Today</span>
+      <div class="dialog old-settings">
+        <div class="o-h">Settings <span style="font-size:15px;color:var(--text-faint)">✕</span></div>
+        <div class="o-l">Appearance</div>
+        <div class="o-seg"><span class="on">System</span><span>Light</span><span>Dark</span></div>
+        <div class="o-l">When pasting Markdown</div>
+        <div class="o-seg"><span class="on">Format it</span><span>Keep as Markdown</span></div>
+        <div class="o-l">Account &amp; Sync</div>
+        <div class="o-box">francisgonzales.private@gmail.com · Sign Out<br>Everything on this device is uploaded.<br>Sync automatically ●<br>
+          <span class="o-btn f">Upload Changes</span><span class="o-btn">Download from Server</span></div>
+      </div>
+      <div style="position:relative">
+        <span class="tag new" style="position:absolute;top:-24px;left:0">New</span>
+        <div class="dialog settings" id="settings">
+          <nav class="s-nav" aria-label="Settings sections">
+            <div class="ttl">Settings</div>
+            <button type="button" data-pane="appearance" aria-selected="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v16a8 8 0 0 0 0-16z" fill="currentColor"/></svg>Appearance</button>
+            <button type="button" data-pane="editor" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg>Editor</button>
+            <button type="button" data-pane="sync" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-14 5.3M4 12a8 8 0 0 1 14-5.3"/><path d="M18 3v4h-4M6 21v-4h4"/></svg>Sync &amp; account</button>
+            <button type="button" data-pane="about" aria-selected="false"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 11v5M12 8h.01"/></svg>About</button>
+            <div class="who"><span class="avatar">FG</span>Synced now</div>
+          </nav>
+          <div class="s-main">
+            <div class="s-top"><span class="d-close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></span></div>
+
+            <div class="s-pane on" data-pane="appearance">
+              <h3>Appearance</h3>
+              <p class="lead">How Noote looks on this device.</p>
+              <div class="s-row" style="display:block">
+                <div class="l" style="margin-bottom:10px"><b>Theme</b><span>System follows your Mac's light or dark setting.</span></div>
+                <div class="themes">
+                  <div class="theme-card on"><div class="pv system"></div>System</div>
+                  <div class="theme-card"><div class="pv light"><div class="sb"></div><div class="main"><i></i><i></i><i style="width:80%"></i></div></div>Light</div>
+                  <div class="theme-card"><div class="pv dark"><div class="sb"></div><div class="main"><i></i><i></i><i style="width:80%"></i></div></div>Dark</div>
+                </div>
+              </div>
+              <div class="s-row">
+                <div class="l"><b>Pane widths</b><span>The sidebar and notes list remember how wide you dragged them.</span></div>
+                <span class="btn">Reset</span>
+              </div>
+            </div>
+
+            <div class="s-pane" data-pane="editor">
+              <h3>Editor</h3>
+              <p class="lead">Writing and pasting.</p>
+              <div class="s-row">
+                <div class="l"><b>When pasting Markdown</b><span>Right after pasting you can switch to the other one.</span></div>
+                <div class="seg"><span class="on">Format it</span><span>Keep as Markdown</span></div>
+              </div>
+              <div class="s-row">
+                <div class="l"><b>PDFs in notes</b><span>Show a PDF's first page, or just its name.</span></div>
+                <div class="seg"><span class="on">Preview</span><span>Card</span></div>
+              </div>
+            </div>
+
+            <div class="s-pane" data-pane="sync">
+              <h3>Sync &amp; account</h3>
+              <p class="lead">Your notes are stored on this device and in your Noote account.</p>
+              <div class="card-box acct">
+                <span class="avatar lg">FG</span>
+                <div class="who2"><b>francisgonzales.private@gmail.com</b><span>Signed in on this Mac</span></div>
+                <span class="btn">Sign out</span>
+              </div>
+              <div class="card-box">
+                <div class="sync-line"><i></i>Everything is uploaded</div>
+                <div class="sync-meta">Last upload 3 min ago · last download 3 min ago</div>
+                <div class="btns"><span class="btn">Upload now</span><span class="btn">Download from server…</span></div>
+              </div>
+              <div class="s-row">
+                <div class="l"><b>Sync automatically</b><span>Uploads a few seconds after you change something and gets the latest when Noote opens.</span></div>
+                <span class="switch" role="img" aria-label="On"></span>
+              </div>
+            </div>
+
+            <div class="s-pane" data-pane="about">
+              <h3>About Noote</h3>
+              <p class="lead">Version and where your data lives.</p>
+              <dl class="about-grid">
+                <dt>Version</dt><dd>1.0.0</dd>
+                <dt>Server</dt><dd>Supabase · Singapore</dd>
+                <dt>On this Mac</dt><dd>307 notes · 6 attachments</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DELETE FOLDER -->
+    <div class="stage">
+      <span class="stage-label tag new">Delete folder</span>
+      <div class="dialog">
+        <div class="d-head">
+          <span class="d-icon danger"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></span>
+          <div><div class="d-title">Delete “Pivotly”?</div><div class="d-sub">The folder and its subfolders go away.</div></div>
+          <span class="d-close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></span>
+        </div>
+        <div class="d-body">
+          <div class="facts"><span class="fact">3 subfolders</span><span class="fact">83 notes</span><span class="fact">2 attachments</span></div>
+          <div class="option on"><span class="radio"></span><div><b>Keep the notes <span class="rec">Recommended</span></b><span>Move all 83 to Personal.</span></div></div>
+          <div class="option danger-opt"><span class="radio"></span><div><b>Delete the notes too</b><span>They go to Recently Deleted, where you can restore them.</span></div></div>
+        </div>
+        <div class="d-foot"><span class="hint"><kbd>Esc</kbd> to cancel</span><span class="btn">Cancel</span><span class="btn danger">Delete folder</span></div>
+      </div>
+    </div>
+
+    <!-- NEW FOLDER -->
+    <div class="stage">
+      <span class="stage-label tag new">New folder · Rename</span>
+      <div class="dialog" style="width:380px">
+        <div class="d-head">
+          <span class="d-icon"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10.5v5M9.5 13h5"/></svg></span>
+          <div><div class="d-title">New folder</div></div>
+          <span class="d-close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></span>
+        </div>
+        <div class="d-body">
+          <div class="d-input">Site visits<span class="caret"></span></div>
+          <div class="field-row">Inside <span class="select">Apple Notes / Pivotly<svg viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></svg></span></div>
+        </div>
+        <div class="d-foot"><span class="hint"><kbd>↵</kbd> to create</span><span class="btn">Cancel</span><span class="btn primary">Create</span></div>
+      </div>
+    </div>
+
+    <!-- MOVE TO -->
+    <div class="stage">
+      <span class="stage-label tag new">Move to…</span>
+      <div class="dialog">
+        <div class="d-head">
+          <span class="d-icon"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M10 13h6M13.5 10.5 16 13l-2.5 2.5"/></svg></span>
+          <div><div class="d-title">Move 3 notes</div><div class="d-sub">From Apple Notes / Pivotly</div></div>
+          <span class="d-close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></span>
+        </div>
+        <div class="d-body">
+          <div class="d-input">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>jf<span class="caret"></span>
+          </div>
+          <div class="tree">
+            <div class="t-row"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Apple Notes</div>
+            <div class="t-row i1 off"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Pivotly<span class="badge">Current</span></div>
+            <div class="t-row i2 sel"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>jfb<svg class="check" viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></svg></div>
+            <div class="t-row i2"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>jfb / fieldops</div>
+          </div>
+        </div>
+        <div class="d-foot"><span class="hint"><kbd>↑</kbd><kbd>↓</kbd> pick · <kbd>↵</kbd> move</span><span class="btn">Cancel</span><span class="btn primary">Move to jfb</span></div>
+      </div>
+    </div>
+
+    <!-- TAGS -->
+    <div class="stage">
+      <span class="stage-label tag new">Tags</span>
+      <div class="dialog" style="width:380px">
+        <div class="d-head">
+          <span class="d-icon"><svg viewBox="0 0 24 24"><path d="M3 12V5a2 2 0 0 1 2-2h7l9 9-9 9z"/><circle cx="8" cy="8" r="1.4"/></svg></span>
+          <div><div class="d-title">Tags</div><div class="d-sub">For “Site visit — Fountain Lake”</div></div>
+          <span class="d-close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></span>
+        </div>
+        <div class="d-body">
+          <div class="d-input">insp<span class="caret"></span></div>
+          <div class="tree" style="border:0;padding:2px 0 0">
+            <div class="tag-row on"><span class="box"></span><span class="hash">#</span>inspections</div>
+            <div class="tag-row"><span class="box"></span><span class="hash">#</span>inspection-photos</div>
+            <div class="tag-row create"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create “insp”</div>
+          </div>
+        </div>
+        <div class="d-foot"><span class="hint">Type to search or create</span><span class="btn primary">Done</span></div>
+      </div>
+    </div>
+
+    <!-- SIGN OUT WITH PENDING CHANGES -->
+    <div class="stage">
+      <span class="stage-label tag new">Sign out</span>
+      <div class="dialog">
+        <div class="d-head">
+          <span class="d-icon"><svg viewBox="0 0 24 24"><path d="M7 18a4.5 4.5 0 0 1-.5-9 6 6 0 0 1 11.6 1.5A4 4 0 0 1 17 18"/><path d="M12 12v8M9 15l3-3 3 3"/></svg></span>
+          <div><div class="d-title">2 changes aren't uploaded yet</div><div class="d-sub">They upload next time you sign in — unless another account signs in on this Mac first.</div></div>
+          <span class="d-close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></span>
+        </div>
+        <div class="d-body"><div class="facts"><span class="fact">1 note edited</span><span class="fact">1 file added</span></div></div>
+        <div class="d-foot"><span class="btn ghost-danger" style="margin-right:auto;padding-left:0">Sign out anyway</span><span class="btn">Cancel</span><span class="btn primary">Upload and sign out</span></div>
+      </div>
+    </div>
+
+    <!-- IMPORT INTO EXISTING FOLDER -->
+    <div class="stage">
+      <span class="stage-label tag new">Import folder</span>
+      <div class="dialog">
+        <div class="d-head">
+          <span class="d-icon"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></span>
+          <div><div class="d-title">Import “Apple Notes”</div><div class="d-sub">You already have a folder with this name.</div></div>
+          <span class="d-close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></span>
+        </div>
+        <div class="d-body">
+          <div class="option on"><span class="radio"></span><div><b>Add the missing notes <span class="rec">Recommended</span></b><span>11 new · 288 already there and left as they are.</span></div></div>
+          <div class="option"><span class="radio"></span><div><b>Import everything as a new folder</b><span>All 299 notes, alongside the existing folder.</span></div></div>
+        </div>
+        <div class="d-foot"><span class="hint"><kbd>↵</kbd> to import</span><span class="btn">Cancel</span><span class="btn primary">Add 11 notes</span></div>
+      </div>
+    </div>
+
+    <!-- DELETE FOREVER -->
+    <div class="stage">
+      <span class="stage-label tag new">Delete forever</span>
+      <div class="dialog" style="width:380px">
+        <div class="d-head">
+          <span class="d-icon danger"><svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.4 17.5A2 2 0 0 0 4.1 20.5h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></span>
+          <div><div class="d-title">Delete “Grocery List” forever?</div><div class="d-sub">It's removed from all your devices. This can't be undone.</div></div>
+          <span class="d-close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></span>
+        </div>
+        <div class="d-foot" style="padding-top:18px"><span class="hint"><kbd>Esc</kbd> to cancel</span><span class="btn">Cancel</span><span class="btn danger">Delete forever</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Plan</h2>
+  <div class="plan">
+    <ol>
+      <li><b>Text fields (whole app).</b> Turn off the grey fill in the theme (<code>inputDecorationTheme</code>): plain background, thin outline, darker outline on focus. The note title and in-editor fields get no fill and no outline. Fixes desktop too.</li>
+      <li><b>Folders home screen.</b> New mobile home: All Notes, the folder tree reusing the desktop's show/hide subfolders, tags, Recently Deleted. Gear → Settings (a full screen, no longer a tab). Bottom bar: New folder, sync status, New note.</li>
+      <li><b>Folder screen.</b> Back to Folders, large folder title and count, search scoped to the folder, its subfolders, notes grouped by date. ••• menu: Import Markdown, Select notes. Bottom bar: count and New note (into this folder). "All Notes" uses the same screen across every folder.</li>
+      <li><b>Remove the tabs, the floating button and Shared.</b> Delete the bottom tab bar, the FAB and the hard-coded Work/Personal/Shared chips; hide "Shared" (and "Shared with me" on desktop) until sharing exists. Routes become <code>/</code> (folders), <code>/folders/:id</code>, <code>/notes/:id</code>, <code>/settings</code>; the system Back button walks back up.</li>
+      <li><b>Note screen.</b> Back goes to the folder you came from; remove the Share button; make the bar above the keyboard work (text styles, checklist, list, code, attach, Done) — today only attach does anything.</li>
+      <li><b>Desktop layout stays as it is</b>, apart from the text-field fix and hiding Shared.</li>
+      <li><b>One dialog component.</b> A shared <code>NooteDialog</code> (icon, title, summary, close; body; footer with keyboard hint and buttons) plus shared buttons (primary, secondary, red, quiet), option cards and fact chips. <kbd>Esc</kbd>/<kbd>↵</kbd>, first-field focus, a short fade-and-scale in. Phones show the same content as bottom sheets.</li>
+      <li><b>Settings as a window with sections</b> — Appearance (theme previews, reset pane widths), Editor (paste Markdown, PDF previews default), Sync &amp; account (account card, sync status, automatic sync, upload/download), About. On mobile the same sections become the Settings screen.</li>
+      <li><b>Rebuild every dialog on it:</b> delete folder (counts, option cards), new folder / rename (with where it goes), move to (search, current folder marked), tags (search or create in one field), sign out and download (say what's not uploaded), import into an existing folder (counts worked out before asking), delete forever.</li>
+      <li><b>Tests.</b> Navigation (folders → notes → note and back, Android Back), new note lands in the open folder, no tab bar or FAB on mobile, no Shared anywhere; each dialog's keyboard behaviour and what it changes; then try it on your Mac and Galaxy.</li>
+    </ol>
+  </div>
+</section>
+
+<footer>Mockup only — colours, fonts and sizes match Noote's theme; real notes and folder names are illustrative.</footer>
+
+<script>
+  // Light / Dark / System switch for previewing both themes.
+  const root = document.documentElement;
+  const buttons = document.querySelectorAll('.theme-switch button');
+  function apply(mode){
+    if (mode === 'system') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', mode);
+    buttons.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.set === mode)));
+    try { localStorage.setItem('noote-redesign-theme', mode); } catch (e) {}
+  }
+  buttons.forEach(b => b.addEventListener('click', () => apply(b.dataset.set)));
+
+  // Settings window: the sidebar switches sections.
+  const settings = document.getElementById('settings');
+  settings.querySelectorAll('.s-nav button').forEach(button => {
+    button.addEventListener('click', () => {
+      settings.querySelectorAll('.s-nav button').forEach(b => b.setAttribute('aria-selected', String(b === button)));
+      settings.querySelectorAll('.s-pane').forEach(p => p.classList.toggle('on', p.dataset.pane === button.dataset.pane));
+    });
+  });
+  try { const saved = localStorage.getItem('noote-redesign-theme'); if (saved) apply(saved); } catch (e) {}
+</script>
+</body>
+</html>
