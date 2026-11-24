@@ -161,12 +161,15 @@ class _FolderList extends ConsumerWidget {
                       onToggle,
                     }) => MobileRow(
                       topDivider: folder.id != roots.first.id,
+                      // The row's whole left strip toggles, not just the
+                      // small arrow (see MobileRow.onLeadingTap).
                       leading: FolderDisclosure(
                         expanded: expanded,
-                        onToggle: onToggle,
+                        onToggle: null,
                         size: 18,
                         color: colors.textFaint,
                       ),
+                      onLeadingTap: onToggle,
                       icon: Icons.folder_outlined,
                       label: folder.name,
                       count: noteCount,

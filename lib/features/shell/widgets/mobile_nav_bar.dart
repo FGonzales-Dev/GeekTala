@@ -276,8 +276,13 @@ class MobileRow extends StatelessWidget {
     this.dropHighlight = false,
     required this.onTap,
     this.onLongPress,
+    this.onLeadingTap,
     this.topDivider = false,
   });
+
+  /// A tap on the [leading] strip (indent + arrow column, full row height),
+  /// e.g. showing or hiding subfolders; null lets the tap open the row.
+  final VoidCallback? onLeadingTap;
 
   /// A hairline above the row, inside a `MobileGroup(dividers: false)`.
   final bool topDivider;
@@ -310,20 +315,37 @@ class MobileRow extends StatelessWidget {
               ? null
               : (details) => onLongPress!(details.globalPosition),
           child: Padding(
-            padding: EdgeInsets.fromLTRB(6 + depth * 18.0, 11, 10, 11),
+            padding: const EdgeInsets.only(right: 10),
             child: Row(
               children: [
-                SizedBox(width: 26, child: Center(child: leading)),
+                // The indent and [leading] column, the full height of the
+                // row: with [onLeadingTap] the whole strip is its tap
+                // target, so a finger that lands near a small arrow
+                // doesn't open the row instead.
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onLeadingTap,
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(6 + depth * 18.0, 11, 0, 11),
+                    child: SizedBox(
+                      width: 32,
+                      child: Center(child: leading),
+                    ),
+                  ),
+                ),
                 Icon(icon, size: 19, color: theme.colorScheme.onSurfaceVariant),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text(
-                    label,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 15,
-                      color: theme.colorScheme.onSurface,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                    child: Text(
+                      label,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 15,
+                        color: theme.colorScheme.onSurface,
+                      ),
                     ),
                   ),
                 ),
