@@ -1,7 +1,10 @@
 import 'package:appflowy_editor/appflowy_editor.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:noote/features/note_editor/clipboard_html.dart';
 import 'package:noote/features/note_editor/markdown_convert.dart';
 import 'package:noote/features/note_editor/markdown_paste.dart';
+
+import 'support/clipboard_html_samples.dart';
 
 const sample = '''# Shopping
 Get **oat milk** and [coffee](https://example.com).
@@ -71,9 +74,11 @@ void main() {
     late EditorState editorState;
     late MarkdownPaste paste;
     var formattedByDefault = true;
+    String? clipboardHtml;
 
     setUp(() {
       formattedByDefault = true;
+      clipboardHtml = null;
       editorState = EditorState(
         document: Document.blank()
           ..insert([0], [paragraphNode(text: 'Before after')]),
@@ -81,6 +86,7 @@ void main() {
       paste = MarkdownPaste(
         editorState,
         formattedByDefault: () => formattedByDefault,
+        readHtml: () async => clipboardHtml,
       );
       // Cursor between "Before " and "after".
       editorState.selection = Selection.collapsed(
@@ -180,6 +186,82 @@ void main() {
 
       expect(texts(), ['Before plain after']);
       expect(paste.lastPasteFormatted, isNull);
+    });
+
+    test('text copied with formatting pastes from its HTML', () async {
+      // The plain text would pass for Markdown ("1." and "2." lines), and
+      // would lose the `*`s and the table.
+      AppFlowyClipboard.mockSetData(
+        AppFlowyClipboardData(text: claudeCodeCopyText),
+      );
+      clipboardHtml = clipboardHtmlFragment(claudeCodeCopy);
+      editorState.selection = Selection.collapsed(
+        Position(path: [0], offset: 12),
+      );
+      await pressPaste();
+
+      expect(paste.lastPasteFromHtml, isTrue);
+      expect(paste.lastPasteFormatted, isTrue);
+      expect(types(), contains('table'));
+      expect(types().where((t) => t == 'bulleted_list'), hasLength(4));
+      expect(
+        texts(),
+        contains(
+          'the vendor secrets in prd: app-envdaily-hydrovu-*, '
+          'app-envdaily-wqdatalive-api-key and app-envdaily-ecomzen-*;',
+        ),
+      );
+
+      await paste.swap();
+      expect(paste.lastPasteFormatted, isFalse);
+      expect(types().toSet(), {'paragraph'});
+      expect(texts(), contains('Setting\tProjects'));
+      // Starts with a paragraph: joined to the line it was pasted on.
+      expect(texts().first, startsWith('Before afterYes. Prd'));
+
+      await paste.swap();
+      expect(types(), contains('table'));
+    });
+
+    test('with "Plain text" in Settings, HTML pastes plain first', () async {
+      formattedByDefault = false;
+      AppFlowyClipboard.mockSetData(AppFlowyClipboardData(text: 'Hi there'));
+      clipboardHtml = '<p>Hi <b>there</b></p>';
+      await pressPaste();
+
+      expect(paste.lastPasteFromHtml, isTrue);
+      expect(paste.lastPasteFormatted, isFalse);
+      expect(texts(), ['Before Hi thereafter']);
+    });
+
+    test('a code editor\'s HTML still pastes Markdown as Markdown', () async {
+      AppFlowyClipboard.mockSetData(
+        AppFlowyClipboardData(text: vsCodeEditorCopyText),
+      );
+      clipboardHtml = vsCodeEditorCopy;
+      await pressPaste();
+
+      expect(paste.lastPasteFromHtml, isFalse);
+      expect(paste.lastPasteFormatted, isTrue);
+      expect(types(), contains('heading'));
+    });
+
+    test('HTML with no formatting pastes the text as before', () async {
+      AppFlowyClipboard.mockSetData(AppFlowyClipboardData(text: 'plain '));
+      clipboardHtml = '<span style="color: red">plain </span>';
+      await pressPaste();
+
+      expect(texts(), ['Before plain after']);
+      expect(paste.lastPasteFormatted, isNull);
+    });
+
+    test('a table on its own, pasted mid-line, goes after the line', () async {
+      AppFlowyClipboard.mockSetData(AppFlowyClipboardData(text: 'a\tb'));
+      clipboardHtml = '<table><tr><td>a</td><td>b</td></tr></table>';
+      await pressPaste();
+
+      expect(types(), ['paragraph', 'table']);
+      expect(texts().first, 'Before after');
     });
 
     test('editing after a paste ends the offer', () async {

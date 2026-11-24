@@ -61,6 +61,9 @@ dependencies:
   # Already used by appflowy_editor's Markdown converter; imported directly
   # for the code-block parser in lib/features/note_editor/markdown_convert.dart.
   markdown: ^7.3.0
+  # Already used by appflowy_editor's HTML converter; imported directly for
+  # pasting clipboard HTML (lib/features/note_editor/html_convert.dart).
+  html: ^0.15.6
   image: ^4.12.0
   pasteboard: ^0.6.0
   desktop_drop: ^0.8.4

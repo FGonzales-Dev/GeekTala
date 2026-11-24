@@ -6,14 +6,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../data/providers/device_settings_provider.dart';
+import 'clipboard_html.dart';
+import 'html_convert.dart';
 import 'markdown_convert.dart';
 
 // ---------------------------------------------------------------------------
 // Preference
 // ---------------------------------------------------------------------------
 
-/// Settings → "When pasting Markdown": true = format it (the default),
-/// false = keep the Markdown text. Remembered on this device.
+/// Settings → "When pasting formatted text": true = format it (the
+/// default), false = paste the plain text (for Markdown, the Markdown
+/// text). Remembered on this device.
 final pasteMarkdownFormattedProvider = Provider<bool>((ref) {
   return ref.watch(
         deviceSettingsProvider.select(
@@ -34,17 +37,23 @@ Future<void> setPasteMarkdownFormatted(WidgetRef ref, bool formatted) {
 // Paste
 // ---------------------------------------------------------------------------
 
-/// Pastes Markdown into one note's editor — formatted, or as the raw
-/// Markdown text — and lets the user swap the paste for the other version
-/// (see [MarkdownPasteBar]) until they carry on editing.
+/// Pastes formatted text into one note's editor — formatted, or as plain
+/// text — and lets the user swap the paste for the other version (see
+/// [MarkdownPasteBar]) until they carry on editing.
 ///
-/// Text that doesn't look like Markdown ([looksLikeMarkdown]) goes through
-/// the editor's normal paste, unchanged.
+/// Formatted text is either the HTML that web pages, chat apps and
+/// documents put on the clipboard ([readClipboardHtml]), or text that
+/// looks like Markdown ([looksLikeMarkdown]). HTML wins, as it's what the
+/// user saw: its plain text has lost the formatting, and can look like
+/// Markdown when it isn't (a `*` in a name, a line starting "1.").
+///
+/// Anything else goes through the editor's normal paste, unchanged.
 class MarkdownPaste extends ChangeNotifier {
   MarkdownPaste(
     this._editorState, {
     required this.formattedByDefault,
     this.pasteFiles,
+    this.readHtml = readClipboardHtml,
   }) {
     _transactions = _editorState.transactionStream.listen((_) {
       // Any edit that isn't part of a paste or swap ends the offer.
@@ -61,6 +70,9 @@ class MarkdownPaste extends ChangeNotifier {
   /// any. Returns whether it did.
   final Future<bool> Function()? pasteFiles;
 
+  /// The clipboard's HTML, if any (replaced in tests).
+  final Future<String?> Function() readHtml;
+
   /// The editor this pastes into (also used by the mobile editor's image
   /// button, via [MarkdownPasteTargets]).
   EditorState get editorState => _editorState;
@@ -75,6 +87,10 @@ class MarkdownPaste extends ChangeNotifier {
   /// Whether the last paste went in formatted; null when there's no paste
   /// to swap.
   bool? get lastPasteFormatted => _last?.formatted;
+
+  /// Whether the last paste came from the clipboard's HTML (rather than
+  /// Markdown text).
+  bool get lastPasteFromHtml => _last?.clip.html != null;
 
   /// The editor's standard shortcuts, with ⌘V/Ctrl+V replaced by this.
   /// ⌘⇧V (paste as plain text) is left as it is.
@@ -97,6 +113,17 @@ class MarkdownPaste extends ChangeNotifier {
   Future<void> _pasteFromShortcut() async {
     if (await pasteFiles?.call() ?? false) return;
     final text = (await AppFlowyClipboard.getData()).text;
+    final html = await readHtml();
+    if (html != null) {
+      final nodes = htmlToNoteNodes(html);
+      if (htmlHasFormatting(nodes)) {
+        final plain = text == null || text.isEmpty
+            ? plainTextOfNodes(nodes)
+            : text;
+        await _paste(_Clip.html(html, plain), formatted: formattedByDefault());
+        return;
+      }
+    }
     if (text == null || text.isEmpty) return;
     if (!looksLikeMarkdown(text)) {
       // The editor's own paste (it also turns a pasted URL into a link).
@@ -123,14 +150,17 @@ class MarkdownPaste extends ChangeNotifier {
     return true;
   }
 
-  /// Pastes [text] at the selection as formatted blocks or as plain lines
-  /// of Markdown, and offers the other version.
-  Future<void> paste(String text, {required bool formatted}) async {
+  /// Pastes Markdown [text] at the selection as formatted blocks or as
+  /// plain lines of Markdown, and offers the other version.
+  Future<void> paste(String text, {required bool formatted}) =>
+      _paste(_Clip.markdown(text), formatted: formatted);
+
+  Future<void> _paste(_Clip clip, {required bool formatted}) async {
     if (_editorState.selection == null) return;
     await _run(() async {
       final before = _Snapshot.of(_editorState);
-      await _insert(text, formatted: formatted);
-      _offer(_LastPaste(text: text, formatted: formatted, before: before));
+      await _insert(clip, formatted: formatted);
+      _offer(_LastPaste(clip: clip, formatted: formatted, before: before));
     });
   }
 
@@ -140,7 +170,7 @@ class MarkdownPaste extends ChangeNotifier {
     if (last == null) return;
     await _run(() async {
       await last.before.restore(_editorState);
-      await _insert(last.text, formatted: !last.formatted);
+      await _insert(last.clip, formatted: !last.formatted);
       _offer(last.swapped());
     });
   }
@@ -168,15 +198,15 @@ class MarkdownPaste extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _insert(String text, {required bool formatted}) async {
-    final formattedNodes = _formattedNodes(text);
-    final nodes = formatted ? formattedNodes : _plainNodes(text);
+  Future<void> _insert(_Clip clip, {required bool formatted}) async {
+    final formattedNodes = clip.formattedNodes();
+    final nodes = formatted ? formattedNodes : _plainNodes(clip.text);
     if (nodes.isEmpty) return;
 
-    // Markdown that starts with a heading, list, table… pasted at the start
-    // or end of a line goes on its own line(s), rather than being merged
-    // into that line (the editor's default). Decided from the formatted
-    // version so both versions land in the same place.
+    // Formatting that starts with a heading, list, table… pasted at the
+    // start or end of a line goes on its own line(s), rather than being
+    // merged into that line (the editor's default). Decided from the
+    // formatted version so both versions land in the same place.
     final selection = await _editorState.deleteSelectionIfNeeded();
     if (selection == null) return;
     final node = _editorState.getNodeAtPath(selection.start.path);
@@ -206,7 +236,18 @@ class MarkdownPaste extends ChangeNotifier {
       return;
     }
 
-    if (nodes.length == 1) {
+    if (nodes.length == 1 &&
+        nodes.single.delta == null &&
+        node != null &&
+        delta != null &&
+        delta.isNotEmpty) {
+      // A table or divider on its own, mid-line: the editor's single-block
+      // paste only merges text, so it would drop it. It goes after the line.
+      final transaction = _editorState.transaction
+        ..insertNodes(node.path.next, nodes)
+        ..afterSelection = selection;
+      await _editorState.apply(transaction);
+    } else if (nodes.length == 1) {
       await _editorState.pasteSingleLineNode(nodes.single);
     } else {
       await _editorState.pasteMultiLineNodes(nodes);
@@ -240,21 +281,40 @@ class MarkdownPaste extends ChangeNotifier {
   }
 }
 
+/// What was pasted: Markdown text, or the clipboard's HTML with the plain
+/// text that came with it.
+class _Clip {
+  const _Clip.markdown(this.text) : html = null;
+  const _Clip.html(String this.html, this.text);
+
+  /// The Markdown, or the HTML's plain text: the plain version.
+  final String text;
+  final String? html;
+
+  /// The formatted version (fresh nodes each time: the editor takes them).
+  List<Node> formattedNodes() {
+    final html = this.html;
+    return html != null
+        ? htmlToNoteNodes(html)
+        : MarkdownPaste._formattedNodes(text);
+  }
+}
+
 class _LastPaste {
   const _LastPaste({
-    required this.text,
+    required this.clip,
     required this.formatted,
     required this.before,
   });
 
-  final String text;
+  final _Clip clip;
   final bool formatted;
 
   /// The note as it was just before the paste.
   final _Snapshot before;
 
   _LastPaste swapped() =>
-      _LastPaste(text: text, formatted: !formatted, before: before);
+      _LastPaste(clip: clip, formatted: !formatted, before: before);
 }
 
 /// The whole note body and selection. Swapping restores this and pastes
@@ -283,8 +343,9 @@ class _Snapshot {
 // The swap bar
 // ---------------------------------------------------------------------------
 
-/// "Pasted as formatted text · Show as Markdown ×", shown over the editor
-/// right after a Markdown paste.
+/// "Pasted as formatted text · Show as Markdown ×" (or, for text copied
+/// with its formatting, "Pasted with formatting · Show as plain text ×"),
+/// shown over the editor right after a paste.
 class MarkdownPasteBar extends StatelessWidget {
   const MarkdownPasteBar({super.key, required this.controller});
 
@@ -297,6 +358,15 @@ class MarkdownPasteBar extends StatelessWidget {
       builder: (context, _) {
         final formatted = controller.lastPasteFormatted;
         if (formatted == null) return const SizedBox.shrink();
+        final (label, action) = switch ((
+          controller.lastPasteFromHtml,
+          formatted,
+        )) {
+          (false, true) => ('Pasted as formatted text', 'Show as Markdown'),
+          (false, false) => ('Pasted as Markdown text', 'Show formatted'),
+          (true, true) => ('Pasted with formatting', 'Show as plain text'),
+          (true, false) => ('Pasted as plain text', 'Show formatted'),
+        };
         final theme = Theme.of(context);
         final colors = context.nooteColors;
         // Clicking the bar mustn't take focus (and the cursor) away from
@@ -316,9 +386,7 @@ class MarkdownPasteBar extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    formatted
-                        ? 'Pasted as formatted text'
-                        : 'Pasted as Markdown text',
+                    label,
                     style: TextStyle(
                       fontFamily: 'Inter',
                       fontSize: 12.5,
@@ -326,12 +394,7 @@ class MarkdownPasteBar extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  TextButton(
-                    onPressed: controller.swap,
-                    child: Text(
-                      formatted ? 'Show as Markdown' : 'Show formatted',
-                    ),
-                  ),
+                  TextButton(onPressed: controller.swap, child: Text(action)),
                   IconButton(
                     tooltip: 'Dismiss',
                     iconSize: 16,

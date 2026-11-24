@@ -38,8 +38,9 @@ import 'styled_title_controller.dart';
 /// and download can write them out first, and are written (not dropped)
 /// when switching to another note.
 ///
-/// Pasting Markdown goes through [MarkdownPaste]: formatted or as Markdown
-/// text (Settings), with a bar to swap to the other right after.
+/// Pasting formatted text (copied from web pages and documents) or
+/// Markdown goes through [MarkdownPaste]: formatted or as plain text
+/// (Settings), with a bar to swap to the other right after.
 class NoteEditorBody extends ConsumerStatefulWidget {
   const NoteEditorBody({super.key, required this.noteId, this.desktop = true});
 
@@ -215,8 +216,7 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
     editorState.selection = Selection.collapsed(Position(path: const [0]));
     final markdownPaste = MarkdownPaste(
       editorState,
-      formattedByDefault: () =>
-          ref.read(pasteMarkdownFormattedProvider),
+      formattedByDefault: () => ref.read(pasteMarkdownFormattedProvider),
       pasteFiles: () => _pasteFiles(editorState),
     );
     _pasteTargets.register(noteId, markdownPaste);
@@ -296,7 +296,10 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
   }
 
   /// Files dragged in from Finder/Explorer.
-  Future<void> _dropFiles(DropDoneDetails details, EditorState editorState) async {
+  Future<void> _dropFiles(
+    DropDoneDetails details,
+    EditorState editorState,
+  ) async {
     if (details.files.isEmpty) return;
     final messenger = ScaffoldMessenger.maybeOf(context);
     final store = ref.read(attachmentStoreProvider);
@@ -320,11 +323,8 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
 
   void _scheduleTitleSave(String noteId, StyledTitleController controller) {
     final repository = ref.read(notesRepositoryProvider);
-    _pendingTitleSave = () => repository.updateTitle(
-          noteId,
-          controller.text,
-          style: controller.runs,
-        );
+    _pendingTitleSave = () =>
+        repository.updateTitle(noteId, controller.text, style: controller.runs);
     _titleDebounceTimer?.cancel();
     _titleDebounceTimer = Timer(_saveDebounce, () {
       final save = _pendingTitleSave;
@@ -485,25 +485,27 @@ class _NoteEditorBodyState extends ConsumerState<NoteEditorBody> {
                 ? _TitleToolbar(controller: titleController, theme: theme)
                 : Row(
                     children: [
-                      Expanded(child: FloatingToolbarWidget(
-                    items: [
-                      paragraphItem,
-                      ...headingItems,
-                      ...markdownFormatItems,
-                      quoteItem,
-                      bulletedListItem,
-                      numberedListItem,
-                      linkItem,
-                      buildTextColorItem(),
-                      buildHighlightColorItem(),
-                    ],
-                    editorState: editorState,
-                    textDirection: TextDirection.ltr,
-                    floatingToolbarHeight: 32,
-                    backgroundColor: Colors.transparent,
-                    toolbarActiveColor: theme.colorScheme.primary,
-                    toolbarIconColor: theme.colorScheme.onSurfaceVariant,
-                  )),
+                      Expanded(
+                        child: FloatingToolbarWidget(
+                          items: [
+                            paragraphItem,
+                            ...headingItems,
+                            ...markdownFormatItems,
+                            quoteItem,
+                            bulletedListItem,
+                            numberedListItem,
+                            linkItem,
+                            buildTextColorItem(),
+                            buildHighlightColorItem(),
+                          ],
+                          editorState: editorState,
+                          textDirection: TextDirection.ltr,
+                          floatingToolbarHeight: 32,
+                          backgroundColor: Colors.transparent,
+                          toolbarActiveColor: theme.colorScheme.primary,
+                          toolbarIconColor: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                       if (attachmentsSupported)
                         IconButton(
                           tooltip: 'Add image or file',

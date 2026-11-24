@@ -264,11 +264,13 @@ class _Editor extends ConsumerWidget {
         SettingsRow(
           first: true,
           stacked: compact,
-          title: 'When pasting Markdown',
-          description: 'Right after pasting you can switch to the other one.',
+          title: 'When pasting formatted text',
+          description:
+              'Text copied from web pages, documents and chats, or Markdown. '
+              'Right after pasting you can switch to the other one.',
           trailing: SettingsSegmented<bool>(
             value: pasteFormatted,
-            options: const {true: 'Format it', false: 'Keep as Markdown'},
+            options: const {true: 'Format it', false: 'Plain text'},
             onChanged: (formatted) => setPasteMarkdownFormatted(ref, formatted),
           ),
         ),
